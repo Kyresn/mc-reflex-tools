@@ -6,7 +6,8 @@
     "GpuDeviceAccessor",
     "GpuSurfaceAccessor",
     "VulkanDevicePhysicalDeviceMixin",
-    "VulkanGpuSurfaceAccessor"
+    "VulkanGpuSurfaceAccessor",
+    "WindowFullscreenAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

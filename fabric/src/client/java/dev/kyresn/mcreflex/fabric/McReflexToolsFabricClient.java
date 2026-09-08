@@ -6,7 +6,8 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 public final class McReflexToolsFabricClient implements ClientModInitializer {
     public static final String MOD_ID = "mc_reflex_tools";
@@ -15,25 +16,47 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         FabricMinecraftVulkanContextResolver resolver = new FabricMinecraftVulkanContextResolver();
-        AtomicBoolean loggedAvailableContext = new AtomicBoolean();
+        AtomicReference<FabricPresentationSnapshot> lastPresentation = new AtomicReference<>();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (loggedAvailableContext.get()) {
-                return;
-            }
-
             VulkanProbeResult result = resolver.probe();
-            if (!result.isAvailable() || !loggedAvailableContext.compareAndSet(false, true)) {
+            if (!result.isAvailable()) {
                 return;
             }
 
-            LOGGER.info("NVIDIA SDK probe: status={}, renderer={}, detail={}, device=0x{}, queueFamily={}, swapchain=0x{}",
+            Optional<FabricPresentationSnapshot> captured = FabricPresentationSnapshot.capture(result);
+            if (captured.isEmpty()) {
+                return;
+            }
+
+            FabricPresentationSnapshot presentation = captured.get();
+            FabricPresentationSnapshot previous = lastPresentation.getAndSet(presentation);
+            if (presentation.equals(previous)) {
+                return;
+            }
+
+            LOGGER.info(
+                    "NVIDIA SDK Vulkan probe: status={}, renderer={}, device=0x{}, queueFamily={}, swapchain=0x{}",
                     result.status(),
                     result.renderer(),
-                    result.detail(),
                     Long.toUnsignedString(result.context().device(), 16),
                     result.context().graphicsQueueFamilyIndex(),
-                    Long.toUnsignedString(result.context().swapchain(), 16));
+                    Long.toUnsignedString(presentation.swapchain(), 16)
+            );
+            LOGGER.info(
+                    "Presentation: mode={}, requestedFullscreen={}, actualFullscreen={}, displayAttached={}, monitor={} {}x{}@{}Hz, framebuffer={}x{}, presentMode={}",
+                    presentation.mode(),
+                    presentation.requestedFullscreen(),
+                    presentation.actualFullscreen(),
+                    presentation.displayAttached(),
+                    presentation.monitor(),
+                    presentation.monitorWidth(),
+                    presentation.monitorHeight(),
+                    presentation.monitorRefreshRate(),
+                    presentation.framebufferWidth(),
+                    presentation.framebufferHeight(),
+                    presentation.presentMode()
+            );
         });
     }
 }

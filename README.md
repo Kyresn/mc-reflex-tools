@@ -46,13 +46,15 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 - [x] No self-written AntiLag or Super Resolution fallback.
 - [x] Build verification with JDK 25 and Gradle wrapper.
 - [x] Read-only Fabric 26.2 Vulkan context probe validated against Minecraft-owned device, queue, and swapchain.
+- [x] Validate windowed, borderless-fullscreen, and exclusive-fullscreen Vulkan presentation modes.
 
 ### M1 — Vulkan context verification
 
 - [x] Map the exact Minecraft 26.2 Vulkan renderer classes and lifecycle.
 - [x] Implement a read-only resolver for the Minecraft-owned Vulkan handles.
 - [ ] Add strict validation, version fingerprinting, and disabled-by-default diagnostics.
-- [ ] Verify resource recreation for resize, fullscreen, world switch, and shutdown.
+- [x] Verify initial creation in windowed, borderless-fullscreen, and exclusive-fullscreen presentation modes.
+- [ ] Verify runtime resource recreation for resize, fullscreen toggle, world switch, and shutdown.
 
 ### M2 — official NVIDIA Reflex
 

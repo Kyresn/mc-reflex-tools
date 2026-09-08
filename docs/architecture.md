@@ -42,3 +42,17 @@ Minecraft.windowSurface()
 ```
 
 Minecraft's real submit boundary is `VulkanQueue.Submission.close()`, which calls `vkQueueSubmit2KHR`. Minecraft's real presentation boundary is `VulkanGpuSurface.present()`, which calls `vkQueuePresentKHR`. M1 observes handles only; M2 must add lifecycle markers at these exact paths without creating replacement Vulkan objects.
+
+## AD-008: Presentation mode is measured from GLFW state
+
+M1.1 logs the requested and actual fullscreen state, the `exclusiveFullscreen` preference, GLFW monitor attachment, framebuffer dimensions, swapchain handle, and Vulkan present mode. On Windows, Minecraft explicitly treats `fullscreen=true` with `exclusiveFullscreen=false` as a soft-screen (borderless) path. Only an exclusive preference combined with a non-null `glfwGetWindowMonitor` result is classified as `exclusive-fullscreen`.
+
+Initial Vulkan validation passed on the reference Windows 11 / RTX 5070 system in three modes:
+
+```text
+windowed:               854x480,  IMMEDIATE
+borderless-fullscreen:  1920x1080, IMMEDIATE, display attached
+exclusive-fullscreen:   1920x1080@280Hz, IMMEDIATE, display attached
+```
+
+This establishes the presentation baseline only. Runtime transitions and swapchain recreation remain M1 work.
