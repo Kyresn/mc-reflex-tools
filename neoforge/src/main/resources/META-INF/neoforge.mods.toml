@@ -1,0 +1,28 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+
+[[mods]]
+modId="mc_reflex_tools"
+version="${version}"
+displayName="MC Reflex Tools"
+description='''
+NVIDIA SDK integration for Minecraft's native Vulkan renderer.
+'''
+
+[[mixins]]
+config="mc_reflex_tools.mixins.json"
+
+[[dependencies.mc_reflex_tools]]
+modId="neoforge"
+type="required"
+versionRange="[26.2,)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.mc_reflex_tools]]
+modId="minecraft"
+type="required"
+versionRange="[26.2,26.3)"
+ordering="NONE"
+side="CLIENT"

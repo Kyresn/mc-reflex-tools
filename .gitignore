@@ -1,0 +1,41 @@
+# Gradle
+.gradle/
+build/
+**/build/
+.kotlin/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.settings/
+.classpath
+.project
+
+# Minecraft development
+run/
+runs/
+logs/
+crash-reports/
+
+# Native builds
+nvidia-sdk-native/build/
+nvidia-sdk-native/out/
+*.dll
+*.lib
+*.pdb
+*.so
+*.dylib
+
+# Java
+*.class
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr
+
+# OS
+.DS_Store
+Thumbs.db
