@@ -5,7 +5,7 @@ Minecraft Java Edition `26.2` client mod scaffold for **official NVIDIA SDK inte
 ## Scope
 
 - Minecraft Java Edition `26.2` only.
-- Fabric and NeoForge client artifacts.
+- Fabric client artifact.
 - Windows x64 and Minecraft's native Vulkan renderer.
 - NVIDIA Streamline integration for Reflex first, then DLSS Super Resolution.
 - No legacy Minecraft support.
@@ -34,18 +34,17 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 | `vulkan-context` | Minecraft-owned Vulkan context discovery. M0 intentionally returns unavailable. |
 | `nvidia-sdk-java` | JNI boundary and non-emulating unavailable provider. |
 | `nvidia-sdk-native` | CMake native bridge. NVIDIA SDK binaries are not vendored. |
-| `fabric` | Fabric 26.2 client artifact. |
-| `neoforge` | NeoForge 26.2 client artifact. |
+| `fabric` | Fabric 26.2 client artifact and sole active loader target. |
 
 ## Planned delivery
 
 ### M0 — scaffold and safety gate
 
 - [x] Private GitHub repository with `main` as the default branch.
-- [x] Minecraft `26.2` Fabric and NeoForge Gradle modules.
+- [x] Minecraft `26.2` Fabric Gradle module.
 - [x] Java API and Windows x64 JNI boundary.
 - [x] No self-written AntiLag or Super Resolution fallback.
-- [ ] Build verification with JDK 25 and Gradle wrapper.
+- [x] Build verification with JDK 25 and Gradle wrapper.
 
 ### M1 — Vulkan context verification
 
@@ -78,9 +77,6 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 
 - JDK 25 for Minecraft 26.2.
 - CMake and a C++20 Windows toolchain for `nvidia-sdk-native`.
-- NVIDIA SDK packages only after their license and redistribution terms are accepted.
-
-The current local environment has JDK 21, so Gradle build execution is intentionally deferred until JDK 25 is installed or configured.
 
 ## Build
 
