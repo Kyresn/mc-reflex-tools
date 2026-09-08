@@ -19,3 +19,26 @@ When official Reflex is active, only NVIDIA's SDK controls Reflex sleep and mark
 ## AD-005: Safe failure is a product feature
 
 Missing SDK files, unsupported hardware/driver, incompatible renderer changes, or handle validation failure produce an unavailable status and preserve vanilla behavior.
+
+## AD-006: M1 uses Fabric client-only source sets
+
+Minecraft's rendering and Vulkan classes are client-only. The Fabric module uses Loom's split environment source sets so that the Vulkan resolver and Mixins compile only in `src/client/java`. This prevents common code from accidentally depending on the client renderer.
+
+## AD-007: M1 verified renderer map for Minecraft 26.2
+
+The initial context probe uses the following Minecraft-owned path:
+
+```text
+RenderSystem.getDevice()
+  -> GpuDevice.backend
+  -> VulkanDevice
+     -> VulkanInstance.vkInstance
+     -> VulkanDevice.vkDevice
+     -> VulkanDevice.graphicsQueue
+
+Minecraft.windowSurface()
+  -> GpuSurface.backend
+  -> VulkanGpuSurface.swapchain
+```
+
+Minecraft's real submit boundary is `VulkanQueue.Submission.close()`, which calls `vkQueueSubmit2KHR`. Minecraft's real presentation boundary is `VulkanGpuSurface.present()`, which calls `vkQueuePresentKHR`. M1 observes handles only; M2 must add lifecycle markers at these exact paths without creating replacement Vulkan objects.

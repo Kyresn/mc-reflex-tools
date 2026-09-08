@@ -2,7 +2,12 @@
   "required": true,
   "package": "dev.kyresn.mcreflex.fabric.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": [],
+  "client": [
+    "GpuDeviceAccessor",
+    "GpuSurfaceAccessor",
+    "VulkanDevicePhysicalDeviceMixin",
+    "VulkanGpuSurfaceAccessor"
+  ],
   "injectors": {
     "defaultRequire": 1
   }

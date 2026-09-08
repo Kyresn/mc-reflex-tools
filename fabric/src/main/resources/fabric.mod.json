@@ -5,6 +5,9 @@
   "name": "MC Reflex Tools",
   "description": "NVIDIA SDK integration for Minecraft's native Vulkan renderer.",
   "environment": "client",
+  "mixins": [
+    "mc_reflex_tools.mixins.json"
+  ],
   "entrypoints": {
     "client": [
       "dev.kyresn.mcreflex.fabric.McReflexToolsFabricClient"

@@ -45,11 +45,12 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 - [x] Java API and Windows x64 JNI boundary.
 - [x] No self-written AntiLag or Super Resolution fallback.
 - [x] Build verification with JDK 25 and Gradle wrapper.
+- [x] Read-only Fabric 26.2 Vulkan context probe validated against Minecraft-owned device, queue, and swapchain.
 
 ### M1 — Vulkan context verification
 
-- [ ] Map the exact Minecraft 26.2 Vulkan renderer classes and lifecycle.
-- [ ] Implement a read-only resolver for the Minecraft-owned Vulkan handles.
+- [x] Map the exact Minecraft 26.2 Vulkan renderer classes and lifecycle.
+- [x] Implement a read-only resolver for the Minecraft-owned Vulkan handles.
 - [ ] Add strict validation, version fingerprinting, and disabled-by-default diagnostics.
 - [ ] Verify resource recreation for resize, fullscreen, world switch, and shutdown.
 

@@ -12,6 +12,7 @@ loom {
     mods {
         create(providers.gradleProperty("mod_id").get()) {
             sourceSet(sourceSets.main.get())
+            sourceSet(sourceSets.named("client").get())
         }
     }
 }
