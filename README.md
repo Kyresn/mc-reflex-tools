@@ -54,7 +54,8 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 - [x] Implement a read-only resolver for the Minecraft-owned Vulkan handles.
 - [ ] Add strict validation, version fingerprinting, and disabled-by-default diagnostics.
 - [x] Verify initial creation in windowed, borderless-fullscreen, and exclusive-fullscreen presentation modes.
-- [ ] Verify runtime resource recreation for resize, fullscreen toggle, world switch, and shutdown.
+- [x] Verify runtime windowed ↔ borderless fullscreen ↔ windowed transitions and refresh the borrowed swapchain handle.
+- [ ] Verify runtime exclusive-fullscreen transition through Minecraft's public settings screen, world switch, and shutdown.
 
 ### M2 — official NVIDIA Reflex
 

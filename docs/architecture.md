@@ -55,4 +55,4 @@ borderless-fullscreen:  1920x1080, IMMEDIATE, display attached
 exclusive-fullscreen:   1920x1080@280Hz, IMMEDIATE, display attached
 ```
 
-This establishes the presentation baseline only. Runtime transitions and swapchain recreation remain M1 work.
+This establishes the presentation baseline only. M1 also validated runtime windowed → borderless fullscreen → windowed transitions: Minecraft replaced the `VkSwapchainKHR` when entering fullscreen and again when returning to windowed mode, while preserving the Minecraft-owned `VkDevice`. The resolver rereads the active handle on every probe and therefore does not retain either stale value. Runtime exclusive-fullscreen switching must be tested through Minecraft's settings screen; mutating the exclusive option directly at runtime only selects the borderless path.

@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public final class McReflexToolsFabricClient implements ClientModInitializer {
     public static final String MOD_ID = "mc_reflex_tools";
-    private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     @Override
     public void onInitializeClient() {
