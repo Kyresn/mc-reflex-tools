@@ -1,5 +1,6 @@
 package dev.kyresn.mcreflex.fabric.mixin;
 
+import dev.kyresn.mcreflex.fabric.McReflexToolsFabricClient;
 import dev.kyresn.mcreflex.fabric.VulkanLifecycleTrace;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,10 +12,12 @@ abstract class VulkanGpuSurfacePresentationMixin {
     @Inject(method = "present", at = @At("HEAD"))
     private void mcReflexTools$onPresentStart(CallbackInfo callbackInfo) {
         VulkanLifecycleTrace.onPresentStart();
+        McReflexToolsFabricClient.getReflexProvider().markPresentStart();
     }
 
     @Inject(method = "present", at = @At("RETURN"))
     private void mcReflexTools$onPresentEnd(CallbackInfo callbackInfo) {
         VulkanLifecycleTrace.onPresentEnd();
+        McReflexToolsFabricClient.getReflexProvider().markPresentEnd();
     }
 }

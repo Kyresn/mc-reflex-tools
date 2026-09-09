@@ -26,6 +26,7 @@ if(DEFINED ENV{NVIDIA_STREAMLINE_ROOT})
 
     if(EXISTS "${STREAMLINE_INCLUDE_DIR}/sl.h" AND EXISTS "${STREAMLINE_INCLUDE_DIR}/sl_helpers_vk.h")
         target_include_directories(mc_reflex_tools_native PRIVATE "${STREAMLINE_INCLUDE_DIR}")
+        target_link_libraries(mc_reflex_tools_native PRIVATE "${STREAMLINE_ROOT}/lib/x64/sl.interposer.lib")
         target_compile_definitions(mc_reflex_tools_native PRIVATE MC_REFLEX_TOOLS_HAS_STREAMLINE=1)
         message(STATUS "NVIDIA Streamline headers detected at: ${STREAMLINE_INCLUDE_DIR}")
     else()

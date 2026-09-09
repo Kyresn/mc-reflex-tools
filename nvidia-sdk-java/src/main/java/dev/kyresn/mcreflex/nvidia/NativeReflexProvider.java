@@ -11,7 +11,7 @@ public final class NativeReflexProvider implements ReflexProvider {
 
     public NativeBridgeStatus bridgeStatus() {
         if (!NativeLibraryLoader.tryLoad()) {
-            return NativeBridgeStatus.unavailable("MC Reflex Tools native library could not be loaded");
+            return NativeBridgeStatus.unavailable("MC Reflex Tools native library could not be loaded: " + NativeLibraryLoader.getLoadErrorDetail());
         }
         return nativeBridgeStatus();
     }
