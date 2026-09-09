@@ -56,3 +56,16 @@ exclusive-fullscreen:   1920x1080@280Hz, IMMEDIATE, display attached
 ```
 
 This establishes the presentation baseline only. M1 also validated runtime windowed → borderless fullscreen → windowed transitions: Minecraft replaced the `VkSwapchainKHR` when entering fullscreen and again when returning to windowed mode, while preserving the Minecraft-owned `VkDevice`. The resolver rereads the active handle on every probe and therefore does not retain either stale value. Runtime exclusive-fullscreen switching must be tested through Minecraft's settings screen; mutating the exclusive option directly at runtime only selects the borderless path.
+
+## AD-009: M1 lifecycle markers are trace-only
+
+M1 now traces the actual boundaries that M2 will use for Streamline PCL markers:
+
+```text
+Minecraft.runTick()                    → simulation start
+VulkanQueue.Submission.close()         → vkQueueSubmit2KHR boundary
+VulkanGpuSurface.present(), HEAD       → vkQueuePresentKHR start
+VulkanGpuSurface.present(), RETURN     → vkQueuePresentKHR end
+```
+
+The trace does not load native code, sleep, inject commands, or change queue ownership. On the reference system it observed one submission per rendered frame for more than 2,400 frames without errors. M2 must forward these markers to `slPCLSetMarker` using a valid Streamline `FrameToken`; it must not replace these hooks with a Java-side scheduler.

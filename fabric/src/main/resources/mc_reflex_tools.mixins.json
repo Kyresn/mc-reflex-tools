@@ -5,8 +5,11 @@
   "client": [
     "GpuDeviceAccessor",
     "GpuSurfaceAccessor",
+    "MinecraftSimulationLifecycleMixin",
     "VulkanDevicePhysicalDeviceMixin",
     "VulkanGpuSurfaceAccessor",
+    "VulkanGpuSurfacePresentationMixin",
+    "VulkanQueueSubmissionMixin",
     "WindowFullscreenAccessor"
   ],
   "injectors": {
