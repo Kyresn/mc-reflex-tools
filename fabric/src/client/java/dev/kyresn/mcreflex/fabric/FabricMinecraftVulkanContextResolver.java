@@ -71,7 +71,7 @@ public final class FabricMinecraftVulkanContextResolver implements MinecraftVulk
                 device.graphicsQueue().queueFamilyIndex(),
                 swapchain
         );
-        return VulkanProbeResult.available(RENDERER, context);
+        return FabricVulkanContextValidator.validate(RENDERER, context);
     }
 
     private static VulkanProbeResult unavailable(String detail) {

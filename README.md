@@ -12,9 +12,9 @@ Minecraft Java Edition `26.2` client mod scaffold for **official NVIDIA SDK inte
 - No OpenGL path.
 - No custom AntiLag, frame scheduler, GPU-timing estimator, shader upscaler, or non-NVIDIA fallback.
 
-## Current state: M0 — safe capability probe
+## Current state: M1 — verified Vulkan integration boundary
 
-The repository contains the modular Java/JNI boundary and loader entrypoints. It intentionally does **not** resolve Minecraft Vulkan handles, load Streamline, call Reflex, or emulate any NVIDIA feature yet.
+The Fabric client now resolves and traces Minecraft's Vulkan context, active swapchain, and actual simulation/submit/present boundaries. It intentionally does **not** load Streamline, call Reflex, or emulate any NVIDIA feature.
 
 A feature becomes eligible only when all of these conditions hold:
 
@@ -31,7 +31,7 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 | Module | Responsibility |
 | --- | --- |
 | `common-api` | Feature status, Vulkan context contract, and lifecycle interfaces. |
-| `vulkan-context` | Minecraft-owned Vulkan context discovery. M0 intentionally returns unavailable. |
+| `vulkan-context` | Version-independent contract for Minecraft-owned Vulkan context discovery. |
 | `nvidia-sdk-java` | JNI boundary and non-emulating unavailable provider. |
 | `nvidia-sdk-native` | CMake native bridge. NVIDIA SDK binaries are not vendored. |
 | `fabric` | Fabric 26.2 client artifact and sole active loader target. |
@@ -52,7 +52,7 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 
 - [x] Map the exact Minecraft 26.2 Vulkan renderer classes and lifecycle.
 - [x] Implement a read-only resolver for the Minecraft-owned Vulkan handles.
-- [ ] Add strict validation, version fingerprinting, and disabled-by-default diagnostics.
+- [x] Add strict validation, version fingerprinting, and disabled-by-default diagnostics.
 - [x] Verify initial creation in windowed, borderless-fullscreen, and exclusive-fullscreen presentation modes.
 - [x] Verify runtime windowed ↔ borderless fullscreen ↔ windowed transitions and refresh the borrowed swapchain handle.
 - [x] Trace the actual simulation, Vulkan submit, and Present boundaries without changing their behavior.

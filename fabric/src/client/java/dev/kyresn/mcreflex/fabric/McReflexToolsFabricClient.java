@@ -17,12 +17,19 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
     public void onInitializeClient() {
         FabricMinecraftVulkanContextResolver resolver = new FabricMinecraftVulkanContextResolver();
         AtomicReference<FabricPresentationSnapshot> lastPresentation = new AtomicReference<>();
+        AtomicReference<String> lastUnavailableDetail = new AtomicReference<>();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             VulkanProbeResult result = resolver.probe();
             if (!result.isAvailable()) {
+                String unavailableDetail = result.status() + ":" + result.renderer() + ":" + result.detail();
+                if (!unavailableDetail.equals(lastUnavailableDetail.getAndSet(unavailableDetail))) {
+                    LOGGER.warn("NVIDIA SDK Vulkan probe unavailable: status={}, renderer={}, detail={}",
+                            result.status(), result.renderer(), result.detail());
+                }
                 return;
             }
+            lastUnavailableDetail.set(null);
 
             Optional<FabricPresentationSnapshot> captured = FabricPresentationSnapshot.capture(result);
             if (captured.isEmpty()) {
