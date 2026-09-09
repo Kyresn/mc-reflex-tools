@@ -21,7 +21,16 @@ target_compile_definitions(mc_reflex_tools_native PRIVATE WIN32_LEAN_AND_MEAN NO
 # Streamline is intentionally not vendored. Set NVIDIA_STREAMLINE_ROOT to an SDK
 # distribution accepted under its license before enabling the native implementation.
 if(DEFINED ENV{NVIDIA_STREAMLINE_ROOT})
-    message(STATUS "NVIDIA Streamline SDK root: $ENV{NVIDIA_STREAMLINE_ROOT}")
+    set(STREAMLINE_ROOT "$ENV{NVIDIA_STREAMLINE_ROOT}")
+    set(STREAMLINE_INCLUDE_DIR "${STREAMLINE_ROOT}/include")
+
+    if(EXISTS "${STREAMLINE_INCLUDE_DIR}/sl.h" AND EXISTS "${STREAMLINE_INCLUDE_DIR}/sl_helpers_vk.h")
+        target_include_directories(mc_reflex_tools_native PRIVATE "${STREAMLINE_INCLUDE_DIR}")
+        target_compile_definitions(mc_reflex_tools_native PRIVATE MC_REFLEX_TOOLS_HAS_STREAMLINE=1)
+        message(STATUS "NVIDIA Streamline headers detected at: ${STREAMLINE_INCLUDE_DIR}")
+    else()
+        message(WARNING "NVIDIA_STREAMLINE_ROOT is set, but Streamline headers were not found under ${STREAMLINE_INCLUDE_DIR}")
+    endif()
 else()
-    message(STATUS "NVIDIA_STREAMLINE_ROOT is unset; building the M0 probe-only bridge.")
+    message(STATUS "NVIDIA_STREAMLINE_ROOT is unset; building the M2 native readiness probe only.")
 endif()

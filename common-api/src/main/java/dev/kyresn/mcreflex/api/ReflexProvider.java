@@ -6,8 +6,6 @@ public interface ReflexProvider extends AutoCloseable {
 
     void sleep();
 
-    void markInputSample();
-
     void markSimulationStart();
 
     void markSimulationEnd();

@@ -61,6 +61,7 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 ### M2 — official NVIDIA Reflex
 
 - [ ] Integrate an approved NVIDIA Streamline SDK distribution through `nvidia-sdk-native`.
+- [x] Align the Java marker contract with Streamline 2.14.1 PCL markers and add a native SDK-readiness probe.
 - [ ] Initialize against Minecraft's existing Vulkan device and graphics queue.
 - [ ] Map actual input, simulation, queue-submit, and present boundaries to official Reflex markers.
 - [ ] Call only NVIDIA SDK sleep/marker functions; implement no custom timing algorithm.

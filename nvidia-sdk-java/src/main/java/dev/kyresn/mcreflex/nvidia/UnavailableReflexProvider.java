@@ -25,10 +25,6 @@ public final class UnavailableReflexProvider implements ReflexProvider {
     }
 
     @Override
-    public void markInputSample() {
-    }
-
-    @Override
     public void markSimulationStart() {
     }
 

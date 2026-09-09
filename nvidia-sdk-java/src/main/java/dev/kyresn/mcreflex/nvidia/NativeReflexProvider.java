@@ -1,12 +1,20 @@
 package dev.kyresn.mcreflex.nvidia;
 
 import dev.kyresn.mcreflex.api.MinecraftVulkanContext;
+import dev.kyresn.mcreflex.api.NativeBridgeStatus;
 import dev.kyresn.mcreflex.api.NvidiaFeatureStatus;
 import dev.kyresn.mcreflex.api.ReflexProvider;
 
 /** JNI boundary for the official NVIDIA implementation. */
 public final class NativeReflexProvider implements ReflexProvider {
     private boolean initialized;
+
+    public NativeBridgeStatus bridgeStatus() {
+        if (!NativeLibraryLoader.tryLoad()) {
+            return NativeBridgeStatus.unavailable("MC Reflex Tools native library could not be loaded");
+        }
+        return nativeBridgeStatus();
+    }
 
     @Override
     public NvidiaFeatureStatus initialize(MinecraftVulkanContext context) {
@@ -27,7 +35,6 @@ public final class NativeReflexProvider implements ReflexProvider {
     }
 
     @Override public void sleep() { if (initialized) nativeSleep(); }
-    @Override public void markInputSample() { if (initialized) nativeMarker(Marker.INPUT_SAMPLE); }
     @Override public void markSimulationStart() { if (initialized) nativeMarker(Marker.SIMULATION_START); }
     @Override public void markSimulationEnd() { if (initialized) nativeMarker(Marker.SIMULATION_END); }
     @Override public void markRenderSubmitStart() { if (initialized) nativeMarker(Marker.RENDER_SUBMIT_START); }
@@ -45,17 +52,17 @@ public final class NativeReflexProvider implements ReflexProvider {
 
     private static native int nativeInitialize(long instance, long physicalDevice, long device,
                                                 long graphicsQueue, int queueFamilyIndex, long swapchain);
+    private static native NativeBridgeStatus nativeBridgeStatus();
     private static native void nativeSleep();
     private static native void nativeMarker(int marker);
     private static native void nativeShutdown();
 
     private static final class Marker {
-        private static final int INPUT_SAMPLE = 1;
-        private static final int SIMULATION_START = 2;
-        private static final int SIMULATION_END = 3;
-        private static final int RENDER_SUBMIT_START = 4;
-        private static final int RENDER_SUBMIT_END = 5;
-        private static final int PRESENT_START = 6;
-        private static final int PRESENT_END = 7;
+        private static final int SIMULATION_START = 1;
+        private static final int SIMULATION_END = 2;
+        private static final int RENDER_SUBMIT_START = 3;
+        private static final int RENDER_SUBMIT_END = 4;
+        private static final int PRESENT_START = 5;
+        private static final int PRESENT_END = 6;
     }
 }

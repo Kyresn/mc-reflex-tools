@@ -64,3 +64,18 @@ The trace does not load native code, sleep, inject commands, or change queue own
 `RenderSystem.getBackendDescription()` is a human-readable LWJGL version string after startup, not a reliable Vulkan backend identifier. M1 validates the runtime `GpuDevice.backend` type as `VulkanDevice`, verifies the Minecraft version is exactly `26.2`, and waits until Minecraft configures a non-zero `VkSwapchainKHR`. The client emits each unavailable state once, then reports availability only after the full context is eligible.
 
 The native bridge stays disabled by default until a licensed Streamline package and native toolchain are present.
+
+## AD-011: M2 marker contract tracks Streamline PCL 2.14.1
+
+Streamline 2.14.1 moved latency boundaries to `sl::PCLMarker`; it no longer has an `eInputSample` marker. The Java `ReflexProvider` now maps only these SDK-defined boundaries:
+
+```text
+SimulationStart
+SimulationEnd
+RenderSubmitStart
+RenderSubmitEnd
+PresentStart
+PresentEnd
+```
+
+The M2 readiness bridge reports whether a native DLL loaded and whether official Streamline headers were present at native build time. It deliberately does not call `slInit`, `slSetVulkanInfo`, `slReflexSleep`, or `slPCLSetMarker`. This avoids claiming SDK support before the correct device-creation proxy and runtime distribution plan are implemented.
