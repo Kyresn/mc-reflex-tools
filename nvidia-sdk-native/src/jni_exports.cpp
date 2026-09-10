@@ -48,9 +48,12 @@ constexpr jint kUnavailable = 1;
 
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
 bool g_initialized = false;
-uint64_t g_currentFrameIndex = 0;
 bool g_dlssInitialized = false;
 bool g_dlssGInitialized = false;
+// The single frame token for the current in-flight frame. It is fetched once at
+// frame start (nativeSleep) and reused by every marker for that frame, per the
+// Streamline Reflex/PCL contract: exactly one token per frame.
+sl::FrameToken* g_currentFrameToken = nullptr;
 // Holds the last non-OK Streamline result for diagnostics.
 int g_lastSdkError = 0;
 
@@ -206,7 +209,6 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
     }
 
     g_initialized = true;
-    g_currentFrameIndex = 0;
     return kSuccess;
 #else
     (void)instance; (void)physicalDevice; (void)device;
@@ -271,28 +273,21 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeSleep(JNIEnv*, jclass
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
     if (!g_initialized) return;
 
-    sl::FrameToken* currentFrame = nullptr;
-    uint32_t frameIdx = static_cast<uint32_t>(g_currentFrameIndex);
-    if (slGetNewFrameToken(currentFrame, &frameIdx) == sl::Result::eOk && currentFrame) {
-        slReflexSleep(*currentFrame);
+    // Start a new frame: fetch exactly one fresh token and reuse it for every
+    // marker this frame.
+    if (slGetNewFrameToken(g_currentFrameToken) != sl::Result::eOk || g_currentFrameToken == nullptr) {
+        return;
     }
+    slReflexSleep(*g_currentFrameToken);
 #endif
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeMarker(JNIEnv*, jclass, jint marker) {
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
-    if (!g_initialized) return;
+    if (!g_initialized || g_currentFrameToken == nullptr) return;
 
-    if (marker == 1) { // SIMULATION_START
-        g_currentFrameIndex++;
-    }
-
-    sl::FrameToken* currentFrame = nullptr;
-    uint32_t frameIdx = static_cast<uint32_t>(g_currentFrameIndex);
-    if (slGetNewFrameToken(currentFrame, &frameIdx) == sl::Result::eOk && currentFrame) {
-        slPCLSetMarker(toPclMarker(marker), *currentFrame);
-    }
+    slPCLSetMarker(toPclMarker(marker), *g_currentFrameToken);
 #else
     (void)marker;
 #endif
