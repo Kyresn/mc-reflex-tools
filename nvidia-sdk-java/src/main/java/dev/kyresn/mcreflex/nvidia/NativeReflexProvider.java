@@ -3,6 +3,7 @@ package dev.kyresn.mcreflex.nvidia;
 import dev.kyresn.mcreflex.api.MinecraftVulkanContext;
 import dev.kyresn.mcreflex.api.NativeBridgeStatus;
 import dev.kyresn.mcreflex.api.NvidiaFeatureStatus;
+import dev.kyresn.mcreflex.api.ReflexMode;
 import dev.kyresn.mcreflex.api.ReflexProvider;
 
 /** JNI boundary for the official NVIDIA implementation. */
@@ -34,6 +35,13 @@ public final class NativeReflexProvider implements ReflexProvider {
         return initialized ? NvidiaFeatureStatus.AVAILABLE : NvidiaFeatureStatus.SDK_INITIALIZATION_FAILED;
     }
 
+    @Override
+    public void setOptions(ReflexMode mode, int frameLimitFps) {
+        if (initialized) {
+            nativeSetReflexOptions(mode.getNativeValue(), frameLimitFps);
+        }
+    }
+
     @Override public void sleep() { if (initialized) nativeSleep(); }
     @Override public void markSimulationStart() { if (initialized) nativeMarker(Marker.SIMULATION_START); }
     @Override public void markSimulationEnd() { if (initialized) nativeMarker(Marker.SIMULATION_END); }
@@ -52,6 +60,7 @@ public final class NativeReflexProvider implements ReflexProvider {
 
     private static native int nativeInitialize(long instance, long physicalDevice, long device,
                                                 long graphicsQueue, int queueFamilyIndex, long swapchain);
+    private static native void nativeSetReflexOptions(int mode, int frameLimitFps);
     private static native NativeBridgeStatus nativeBridgeStatus();
     private static native void nativeSleep();
     private static native void nativeMarker(int marker);

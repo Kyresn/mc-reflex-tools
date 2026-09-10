@@ -2,6 +2,7 @@ package dev.kyresn.mcreflex.nvidia;
 
 import dev.kyresn.mcreflex.api.MinecraftVulkanContext;
 import dev.kyresn.mcreflex.api.NvidiaFeatureStatus;
+import dev.kyresn.mcreflex.api.ReflexMode;
 import dev.kyresn.mcreflex.api.ReflexProvider;
 
 /**
@@ -18,6 +19,10 @@ public final class UnavailableReflexProvider implements ReflexProvider {
     @Override
     public NvidiaFeatureStatus initialize(MinecraftVulkanContext context) {
         return status;
+    }
+
+    @Override
+    public void setOptions(ReflexMode mode, int frameLimitFps) {
     }
 
     @Override

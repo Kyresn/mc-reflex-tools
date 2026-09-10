@@ -1,15 +1,14 @@
 package dev.kyresn.mcreflex.fabric;
 
-import dev.kyresn.mcreflex.api.DlssGMode;
 import dev.kyresn.mcreflex.api.DlssGProvider;
 import dev.kyresn.mcreflex.api.DlssGState;
-import dev.kyresn.mcreflex.api.DlssMode;
 import dev.kyresn.mcreflex.api.DlssOptimalSettings;
 import dev.kyresn.mcreflex.api.DlssProvider;
 import dev.kyresn.mcreflex.api.NativeBridgeStatus;
 import dev.kyresn.mcreflex.api.NvidiaFeatureStatus;
 import dev.kyresn.mcreflex.api.ReflexProvider;
 import dev.kyresn.mcreflex.api.VulkanProbeResult;
+import dev.kyresn.mcreflex.fabric.config.ModConfig;
 import dev.kyresn.mcreflex.nvidia.NativeDlssGProvider;
 import dev.kyresn.mcreflex.nvidia.NativeDlssProvider;
 import dev.kyresn.mcreflex.nvidia.NativeReflexProvider;
@@ -47,6 +46,8 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        ModConfig.load();
+
         FabricMinecraftVulkanContextResolver resolver = new FabricMinecraftVulkanContextResolver();
         NativeReflexProvider nativeReflex = new NativeReflexProvider();
         NativeDlssProvider nativeDlss = new NativeDlssProvider();
@@ -86,8 +87,8 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                     LOGGER.info("NVIDIA DLSS native initialization result: {}", dlssStatus);
                     if (dlssStatus == NvidiaFeatureStatus.AVAILABLE) {
                         activeDlssProvider = nativeDlss;
-                        DlssOptimalSettings settings = nativeDlss.getOptimalSettings(DlssMode.MAX_QUALITY, 1920, 1080);
-                        LOGGER.info("NVIDIA DLSS Quality Settings (1080p target): optimalRender={}x{}, minRender={}x{}, maxRender={}x{}",
+                        DlssOptimalSettings settings = nativeDlss.getOptimalSettings(ModConfig.get().dlssMode, 1920, 1080);
+                        LOGGER.info("NVIDIA DLSS Settings (1080p target): optimalRender={}x{}, minRender={}x{}, maxRender={}x{}",
                                 settings.optimalRenderWidth(), settings.optimalRenderHeight(),
                                 settings.renderWidthMin(), settings.renderHeightMin(),
                                 settings.renderWidthMax(), settings.renderHeightMax());
@@ -116,6 +117,20 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
             FabricPresentationSnapshot previous = lastPresentation.getAndSet(presentation);
             if (presentation.equals(previous)) {
                 return;
+            }
+
+            // G-SYNC / VRR auto frame limit calculation
+            ModConfig config = ModConfig.get();
+            int targetLimitFps = config.customFrameLimitFps;
+            if (config.autoGsyncFrameLimit && presentation.monitorRefreshRate() > 0) {
+                targetLimitFps = Math.max(30, presentation.monitorRefreshRate() - 3);
+                LOGGER.info("G-SYNC / VRR Auto Frame Limit: targetFps={} (monitorRefreshRate={}Hz - 3)",
+                        targetLimitFps, presentation.monitorRefreshRate());
+            }
+
+            if (activeReflexProvider instanceof NativeReflexProvider) {
+                activeReflexProvider.setOptions(config.reflexMode, targetLimitFps);
+                LOGGER.info("Applied Reflex options: mode={}, frameLimitFps={}", config.reflexMode, targetLimitFps);
             }
 
             LOGGER.info(

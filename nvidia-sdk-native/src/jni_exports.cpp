@@ -30,6 +30,15 @@ sl::PCLMarker toPclMarker(jint marker) {
     }
 }
 
+sl::ReflexMode toReflexMode(jint mode) {
+    switch (mode) {
+        case 0: return sl::ReflexMode::eOff;
+        case 1: return sl::ReflexMode::eLowLatency;
+        case 2: return sl::ReflexMode::eLowLatencyWithBoost;
+        default: return sl::ReflexMode::eLowLatency;
+    }
+}
+
 sl::DLSSMode toDlssMode(jint mode) {
     switch (mode) {
         case 0: return sl::DLSSMode::eOff;
@@ -114,6 +123,25 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
     (void)instance; (void)physicalDevice; (void)device;
     (void)graphicsQueue; (void)queueFamilyIndex; (void)swapchain;
     return kUnavailable;
+#endif
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeSetReflexOptions(
+        JNIEnv*, jclass, jint mode, jint frameLimitFps) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (!g_initialized) return;
+
+    sl::ReflexOptions reflexOptions{};
+    reflexOptions.mode = toReflexMode(mode);
+    if (frameLimitFps > 0) {
+        reflexOptions.frameLimitUs = static_cast<uint32_t>(1000000 / frameLimitFps);
+    } else {
+        reflexOptions.frameLimitUs = 0;
+    }
+    slReflexSetOptions(reflexOptions);
+#else
+    (void)mode; (void)frameLimitFps;
 #endif
 }
 

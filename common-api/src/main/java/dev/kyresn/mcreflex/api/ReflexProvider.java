@@ -4,6 +4,8 @@ package dev.kyresn.mcreflex.api;
 public interface ReflexProvider extends AutoCloseable {
     NvidiaFeatureStatus initialize(MinecraftVulkanContext context);
 
+    void setOptions(ReflexMode mode, int frameLimitFps);
+
     void sleep();
 
     void markSimulationStart();
