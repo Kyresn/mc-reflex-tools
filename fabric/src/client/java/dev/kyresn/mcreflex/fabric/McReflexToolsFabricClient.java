@@ -119,12 +119,12 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                 return;
             }
 
-            // G-SYNC / VRR auto frame limit calculation
+            // G-SYNC / VRR auto frame limit calculation: 95% of monitor refresh rate (e.g. CS2 / Valorant standard)
             ModConfig config = ModConfig.get();
             int targetLimitFps = config.customFrameLimitFps;
             if (config.autoGsyncFrameLimit && presentation.monitorRefreshRate() > 0) {
-                targetLimitFps = Math.max(30, presentation.monitorRefreshRate() - 3);
-                LOGGER.info("G-SYNC / VRR Auto Frame Limit: targetFps={} (monitorRefreshRate={}Hz - 3)",
+                targetLimitFps = Math.max(30, (int) Math.floor(presentation.monitorRefreshRate() * 0.95));
+                LOGGER.info("G-SYNC / VRR Auto Frame Limit: targetFps={} (95% of {}Hz)",
                         targetLimitFps, presentation.monitorRefreshRate());
             }
 
