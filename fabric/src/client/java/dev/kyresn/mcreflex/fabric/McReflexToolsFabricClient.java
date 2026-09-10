@@ -81,6 +81,11 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                     LOGGER.info("NVIDIA Reflex native initialization result: {}", reflexStatus);
                     if (reflexStatus == NvidiaFeatureStatus.AVAILABLE) {
                         activeReflexProvider = nativeReflex;
+                        dev.kyresn.mcreflex.api.ReflexState reflexState = nativeReflex.getReflexState();
+                        LOGGER.info("NVIDIA Reflex state: lowLatencyAvailable={}, flashIndicatorDriverControlled={}",
+                                reflexState.lowLatencyAvailable(), reflexState.flashIndicatorDriverControlled());
+                    } else {
+                        LOGGER.warn("NVIDIA Reflex failed to initialize, SDK error: {}", nativeReflex.lastSdkError());
                     }
 
                     NvidiaFeatureStatus dlssStatus = nativeDlss.initialize(result.context());
@@ -119,14 +124,10 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                 return;
             }
 
-            // G-SYNC / VRR auto frame limit calculation: 95% of monitor refresh rate (e.g. CS2 / Valorant standard)
+            // G-SYNC automatic frame limiting was removed. Only a manual
+            // customFrameLimitFps value is forwarded to the Reflex driver limiter.
             ModConfig config = ModConfig.get();
             int targetLimitFps = config.customFrameLimitFps;
-            if (config.autoGsyncFrameLimit && presentation.monitorRefreshRate() > 0) {
-                targetLimitFps = Math.max(30, (int) Math.floor(presentation.monitorRefreshRate() * 0.95));
-                LOGGER.info("G-SYNC / VRR Auto Frame Limit: targetFps={} (95% of {}Hz)",
-                        targetLimitFps, presentation.monitorRefreshRate());
-            }
 
             if (activeReflexProvider instanceof NativeReflexProvider) {
                 activeReflexProvider.setOptions(config.reflexMode, targetLimitFps);

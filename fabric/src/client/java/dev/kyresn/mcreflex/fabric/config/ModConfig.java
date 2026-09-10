@@ -21,8 +21,7 @@ public final class ModConfig {
 
     // Default to ON_PLUS_BOOST (On + Boost)
     public ReflexMode reflexMode = ReflexMode.ON_PLUS_BOOST;
-    // Auto limit to 95% of monitor refresh rate
-    public boolean autoGsyncFrameLimit = true;
+    // Manual Reflex driver-level frame limit in FPS; 0 disables the limiter.
     public int customFrameLimitFps = 0;
     public DlssMode dlssMode = DlssMode.MAX_QUALITY;
     public DlssGMode dlssGMode = DlssGMode.OFF;

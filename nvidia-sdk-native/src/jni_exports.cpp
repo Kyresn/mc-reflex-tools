@@ -1,4 +1,6 @@
 #include <jni.h>
+#include <cstdlib>
+#include <string>
 
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
 #include <sl.h>
@@ -6,6 +8,38 @@
 #include <sl_pcl.h>
 #include <sl_dlss.h>
 #include <sl_dlss_g.h>
+#include <sl_helpers.h>
+
+// sl_helpers_vk.h pulls in inline helpers that require the full Vulkan headers,
+// which this project does not vendor. slSetVulkanInfo only needs the three
+// handle types and the VulkanInfo struct below, so declare those directly.
+struct VkInstance_T;
+struct VkPhysicalDevice_T;
+struct VkDevice_T;
+using VkInstance = VkInstance_T*;
+using VkPhysicalDevice = VkPhysicalDevice_T*;
+using VkDevice = VkDevice_T*;
+
+namespace sl {
+// Mirrors sl_helpers_vk.h VulkanInfo exactly (GUID 0x0EED6FD5..., kStructVersion3).
+SL_STRUCT_BEGIN(VulkanInfo, StructType({ 0xeed6fd5, 0x82cd, 0x43a9, { 0xbd, 0xb5, 0x47, 0xa5, 0xba, 0x2f, 0x45, 0xd6 } }), kStructVersion3)
+    VkDevice device {};
+    VkInstance instance{};
+    VkPhysicalDevice physicalDevice{};
+    uint32_t computeQueueIndex{};
+    uint32_t computeQueueFamily{};
+    uint32_t graphicsQueueIndex{};
+    uint32_t graphicsQueueFamily{};
+    uint32_t opticalFlowQueueIndex{};
+    uint32_t opticalFlowQueueFamily{};
+    bool useNativeOpticalFlowMode = false;
+    uint32_t computeQueueCreateFlags{};
+    uint32_t graphicsQueueCreateFlags{};
+    uint32_t opticalFlowQueueCreateFlags{};
+SL_STRUCT_END()
+}
+
+extern "C" sl::Result slSetVulkanInfo(const sl::VulkanInfo& info);
 #endif
 
 namespace {
@@ -17,6 +51,23 @@ bool g_initialized = false;
 uint64_t g_currentFrameIndex = 0;
 bool g_dlssInitialized = false;
 bool g_dlssGInitialized = false;
+// Holds the last non-OK Streamline result for diagnostics.
+int g_lastSdkError = 0;
+
+// Features must be explicitly requested in sl::Preferences::featuresToLoad;
+// otherwise no plugin is loaded and every feature call reports eErrorFeatureMissing.
+const sl::Feature g_featuresToLoad[] = {
+    sl::kFeatureReflex,
+    sl::kFeaturePCL,
+    sl::kFeatureDLSS,
+    sl::kFeatureDLSS_G,
+};
+constexpr uint32_t g_numFeaturesToLoad =
+    static_cast<uint32_t>(sizeof(g_featuresToLoad) / sizeof(g_featuresToLoad[0]));
+
+// Plugin DLL search path (the Streamline SDK bin/x64 directory), populated from
+// the NVIDIA_STREAMLINE_ROOT environment variable.
+std::wstring g_pluginPath;
 
 sl::PCLMarker toPclMarker(jint marker) {
     switch (marker) {
@@ -106,15 +157,53 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
     sl::Preferences pref{};
     pref.showConsole = false;
     pref.logLevel = sl::LogLevel::eDefault;
+    pref.featuresToLoad = g_featuresToLoad;
+    pref.numFeaturesToLoad = g_numFeaturesToLoad;
+
+    // Tell Streamline where its plugin DLLs (sl.reflex.dll, sl.pcl.dll, ...)
+    // live. Without this it searches next to the executable and finds nothing.
+    const char* sdkRoot = std::getenv("NVIDIA_STREAMLINE_ROOT");
+    if (sdkRoot != nullptr) {
+        g_pluginPath = std::wstring(sdkRoot, sdkRoot + std::strlen(sdkRoot));
+    } else {
+        g_pluginPath = L"<path-to-streamline-sdk-v2.14.1>";
+    }
+    g_pluginPath += L"\\bin\\x64";
+    const wchar_t* pluginPaths[] = { g_pluginPath.c_str() };
+    pref.pathsToPlugins = pluginPaths;
+    pref.numPathsToPlugins = 1;
 
     sl::Result res = slInit(pref, sl::kSDKVersion);
     if (res != sl::Result::eOk) {
+        g_lastSdkError = static_cast<int>(res);
+        return kUnavailable;
+    }
+
+    // Streamline feature functions (slReflexSetOptions, slReflexSleep,
+    // slPCLSetMarker, ...) are resolved lazily via slGetFeatureFunction, which
+    // requires the device to be set first. Minecraft creates its own Vulkan
+    // device, so Streamline's vkCreateDevice proxy never intercepts it; the
+    // device must be provided explicitly via slSetVulkanInfo.
+    sl::VulkanInfo vkInfo{};
+    vkInfo.device = reinterpret_cast<VkDevice>(device);
+    vkInfo.instance = reinterpret_cast<VkInstance>(instance);
+    vkInfo.physicalDevice = reinterpret_cast<VkPhysicalDevice>(physicalDevice);
+    vkInfo.graphicsQueueFamily = static_cast<uint32_t>(queueFamilyIndex);
+    vkInfo.graphicsQueueIndex = 0;
+
+    res = slSetVulkanInfo(vkInfo);
+    if (res != sl::Result::eOk) {
+        g_lastSdkError = static_cast<int>(res);
         return kUnavailable;
     }
 
     sl::ReflexOptions reflexOptions{};
     reflexOptions.mode = sl::ReflexMode::eLowLatency;
-    slReflexSetOptions(reflexOptions);
+    res = slReflexSetOptions(reflexOptions);
+    if (res != sl::Result::eOk) {
+        g_lastSdkError = static_cast<int>(res);
+        return kUnavailable;
+    }
 
     g_initialized = true;
     g_currentFrameIndex = 0;
@@ -123,6 +212,38 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
     (void)instance; (void)physicalDevice; (void)device;
     (void)graphicsQueue; (void)queueFamilyIndex; (void)swapchain;
     return kUnavailable;
+#endif
+}
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetReflexState(JNIEnv* env, jclass) {
+    jclass stateClass = env->FindClass("dev/kyresn/mcreflex/api/ReflexState");
+    if (stateClass == nullptr) return nullptr;
+
+    jmethodID constructor = env->GetMethodID(stateClass, "<init>", "(ZZ)V");
+    if (constructor == nullptr) return nullptr;
+
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (g_initialized) {
+        sl::ReflexState state{};
+        if (slReflexGetState(state) == sl::Result::eOk) {
+            return env->NewObject(stateClass, constructor,
+                                  state.lowLatencyAvailable ? JNI_TRUE : JNI_FALSE,
+                                  state.flashIndicatorDriverControlled ? JNI_TRUE : JNI_FALSE);
+        }
+    }
+#endif
+
+    return env->NewObject(stateClass, constructor, JNI_FALSE, JNI_FALSE);
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeLastSdkError(JNIEnv* env, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    const char* name = sl::getResultAsStr(static_cast<sl::Result>(g_lastSdkError));
+    return env->NewStringUTF(name != nullptr ? name : "unknown");
+#else
+    return env->NewStringUTF("streamline not compiled");
 #endif
 }
 

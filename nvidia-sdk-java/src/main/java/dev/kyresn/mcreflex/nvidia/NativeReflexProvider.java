@@ -5,6 +5,7 @@ import dev.kyresn.mcreflex.api.NativeBridgeStatus;
 import dev.kyresn.mcreflex.api.NvidiaFeatureStatus;
 import dev.kyresn.mcreflex.api.ReflexMode;
 import dev.kyresn.mcreflex.api.ReflexProvider;
+import dev.kyresn.mcreflex.api.ReflexState;
 
 /** JNI boundary for the official NVIDIA implementation. */
 public final class NativeReflexProvider implements ReflexProvider {
@@ -35,6 +36,22 @@ public final class NativeReflexProvider implements ReflexProvider {
         return initialized ? NvidiaFeatureStatus.AVAILABLE : NvidiaFeatureStatus.SDK_INITIALIZATION_FAILED;
     }
 
+    /** Returns the live Reflex plugin state; only meaningful after a successful initialize(). */
+    public ReflexState getReflexState() {
+        if (!initialized) {
+            return ReflexState.unavailable();
+        }
+        return nativeGetReflexState();
+    }
+
+    /** Returns the last non-OK Streamline result code as a string, for diagnostics. */
+    public String lastSdkError() {
+        if (!NativeLibraryLoader.tryLoad()) {
+            return "native library not loaded";
+        }
+        return nativeLastSdkError();
+    }
+
     @Override
     public void setOptions(ReflexMode mode, int frameLimitFps) {
         if (initialized) {
@@ -61,6 +78,8 @@ public final class NativeReflexProvider implements ReflexProvider {
     private static native int nativeInitialize(long instance, long physicalDevice, long device,
                                                 long graphicsQueue, int queueFamilyIndex, long swapchain);
     private static native void nativeSetReflexOptions(int mode, int frameLimitFps);
+    private static native ReflexState nativeGetReflexState();
+    private static native String nativeLastSdkError();
     private static native NativeBridgeStatus nativeBridgeStatus();
     private static native void nativeSleep();
     private static native void nativeMarker(int marker);
