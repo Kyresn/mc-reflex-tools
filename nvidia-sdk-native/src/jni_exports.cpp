@@ -5,6 +5,7 @@
 #include <sl_reflex.h>
 #include <sl_pcl.h>
 #include <sl_dlss.h>
+#include <sl_dlss_g.h>
 #endif
 
 namespace {
@@ -15,6 +16,7 @@ constexpr jint kUnavailable = 1;
 bool g_initialized = false;
 uint64_t g_currentFrameIndex = 0;
 bool g_dlssInitialized = false;
+bool g_dlssGInitialized = false;
 
 sl::PCLMarker toPclMarker(jint marker) {
     switch (marker) {
@@ -38,6 +40,16 @@ sl::DLSSMode toDlssMode(jint mode) {
         case 5: return sl::DLSSMode::eUltraQuality;
         case 6: return sl::DLSSMode::eDLAA;
         default: return sl::DLSSMode::eOff;
+    }
+}
+
+sl::DLSSGMode toDlssGMode(jint mode) {
+    switch (mode) {
+        case 0: return sl::DLSSGMode::eOff;
+        case 1: return sl::DLSSGMode::eOn;
+        case 2: return sl::DLSSGMode::eAuto;
+        case 3: return sl::DLSSGMode::eDynamic;
+        default: return sl::DLSSGMode::eOff;
     }
 }
 #endif
@@ -67,7 +79,7 @@ jobject newBridgeStatus(JNIEnv* env, jboolean libraryLoaded, jboolean streamline
 extern "C" JNIEXPORT jobject JNICALL
 Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeBridgeStatus(JNIEnv* env, jclass) {
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
-    return newBridgeStatus(env, JNI_TRUE, JNI_TRUE, "NVIDIA Streamline SDK integrated with Reflex & PCL support");
+    return newBridgeStatus(env, JNI_TRUE, JNI_TRUE, "NVIDIA Streamline SDK integrated with Reflex, DLSS & DLSS-G");
 #else
     return newBridgeStatus(env, JNI_TRUE, JNI_FALSE, "NVIDIA_STREAMLINE_ROOT is not configured at native build time");
 #endif
@@ -144,6 +156,7 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeShutdown(JNIEnv*, jcl
         slShutdown();
         g_initialized = false;
         g_dlssInitialized = false;
+        g_dlssGInitialized = false;
     }
 #endif
 }
@@ -236,5 +249,90 @@ extern "C" JNIEXPORT void JNICALL
 Java_dev_kyresn_mcreflex_nvidia_NativeDlssProvider_nativeDlssShutdown(JNIEnv*, jclass) {
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
     g_dlssInitialized = false;
+#endif
+}
+
+// -----------------------------------------------------------------------------
+// DLSS Frame Generation (DLSS-G) Native Implementations
+// -----------------------------------------------------------------------------
+
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeDlssGProvider_nativeDlssGInitialize(
+        JNIEnv* env, jclass, jlong instance, jlong physicalDevice, jlong device,
+        jlong graphicsQueue, jint queueFamilyIndex, jlong swapchain) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (g_dlssGInitialized) {
+        return kSuccess;
+    }
+
+    if (!g_initialized) {
+        jint reflexInit = Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
+                env, nullptr, instance, physicalDevice, device, graphicsQueue, queueFamilyIndex, swapchain);
+        if (reflexInit != kSuccess) {
+            return reflexInit;
+        }
+    }
+
+    g_dlssGInitialized = true;
+    return kSuccess;
+#else
+    (void)env; (void)instance; (void)physicalDevice; (void)device;
+    (void)graphicsQueue; (void)queueFamilyIndex; (void)swapchain;
+    return kUnavailable;
+#endif
+}
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeDlssGProvider_nativeDlssGGetState(JNIEnv* env, jclass) {
+    jclass stateClass = env->FindClass("dev/kyresn/mcreflex/api/DlssGState");
+    if (stateClass == nullptr) return nullptr;
+
+    jmethodID constructor = env->GetMethodID(stateClass, "<init>", "(ZIZJ)V");
+    if (constructor == nullptr) return nullptr;
+
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (g_dlssGInitialized) {
+        sl::ViewportHandle viewport{ 0 };
+        sl::DLSSGState state{};
+        if (slDLSSGGetState(viewport, state, nullptr) == sl::Result::eOk) {
+            bool supported = (state.status == sl::DLSSGStatus::eOk);
+            int maxFrames = static_cast<int>(state.numFramesToGenerateMax);
+            bool dynamicMfg = (state.bIsDynamicMFGSupported == sl::Boolean::eTrue);
+            long estimatedVram = static_cast<long>(state.estimatedVRAMUsageInBytes);
+
+            return env->NewObject(stateClass, constructor,
+                                  supported ? JNI_TRUE : JNI_FALSE,
+                                  maxFrames,
+                                  dynamicMfg ? JNI_TRUE : JNI_FALSE,
+                                  estimatedVram);
+        }
+    }
+#endif
+
+    return env->NewObject(stateClass, constructor, JNI_FALSE, 0, JNI_FALSE, 0L);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeDlssGProvider_nativeDlssGSetOptions(
+        JNIEnv*, jclass, jint mode, jint numFramesToGenerate) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (!g_dlssGInitialized) return;
+
+    sl::DLSSGOptions options{};
+    options.mode = toDlssGMode(mode);
+    options.numFramesToGenerate = static_cast<uint32_t>(numFramesToGenerate);
+    options.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
+
+    sl::ViewportHandle viewport{ 0 };
+    slDLSSGSetOptions(viewport, options);
+#else
+    (void)mode; (void)numFramesToGenerate;
+#endif
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeDlssGProvider_nativeDlssGShutdown(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    g_dlssGInitialized = false;
 #endif
 }

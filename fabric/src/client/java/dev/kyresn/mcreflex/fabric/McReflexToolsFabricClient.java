@@ -1,5 +1,8 @@
 package dev.kyresn.mcreflex.fabric;
 
+import dev.kyresn.mcreflex.api.DlssGMode;
+import dev.kyresn.mcreflex.api.DlssGProvider;
+import dev.kyresn.mcreflex.api.DlssGState;
 import dev.kyresn.mcreflex.api.DlssMode;
 import dev.kyresn.mcreflex.api.DlssOptimalSettings;
 import dev.kyresn.mcreflex.api.DlssProvider;
@@ -7,8 +10,10 @@ import dev.kyresn.mcreflex.api.NativeBridgeStatus;
 import dev.kyresn.mcreflex.api.NvidiaFeatureStatus;
 import dev.kyresn.mcreflex.api.ReflexProvider;
 import dev.kyresn.mcreflex.api.VulkanProbeResult;
+import dev.kyresn.mcreflex.nvidia.NativeDlssGProvider;
 import dev.kyresn.mcreflex.nvidia.NativeDlssProvider;
 import dev.kyresn.mcreflex.nvidia.NativeReflexProvider;
+import dev.kyresn.mcreflex.nvidia.UnavailableDlssGProvider;
 import dev.kyresn.mcreflex.nvidia.UnavailableDlssProvider;
 import dev.kyresn.mcreflex.nvidia.UnavailableReflexProvider;
 import net.fabricmc.api.ClientModInitializer;
@@ -26,6 +31,7 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
 
     private static volatile ReflexProvider activeReflexProvider = new UnavailableReflexProvider(NvidiaFeatureStatus.MISSING_VULKAN_CONTEXT);
     private static volatile DlssProvider activeDlssProvider = new UnavailableDlssProvider(NvidiaFeatureStatus.MISSING_VULKAN_CONTEXT);
+    private static volatile DlssGProvider activeDlssGProvider = new UnavailableDlssGProvider(NvidiaFeatureStatus.MISSING_VULKAN_CONTEXT);
 
     public static ReflexProvider getReflexProvider() {
         return activeReflexProvider;
@@ -35,11 +41,16 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
         return activeDlssProvider;
     }
 
+    public static DlssGProvider getDlssGProvider() {
+        return activeDlssGProvider;
+    }
+
     @Override
     public void onInitializeClient() {
         FabricMinecraftVulkanContextResolver resolver = new FabricMinecraftVulkanContextResolver();
         NativeReflexProvider nativeReflex = new NativeReflexProvider();
         NativeDlssProvider nativeDlss = new NativeDlssProvider();
+        NativeDlssGProvider nativeDlssG = new NativeDlssGProvider();
         AtomicReference<FabricPresentationSnapshot> lastPresentation = new AtomicReference<>();
         AtomicReference<String> lastUnavailableDetail = new AtomicReference<>();
         AtomicBoolean initializedNative = new AtomicBoolean();
@@ -54,6 +65,7 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                 }
                 activeReflexProvider = new UnavailableReflexProvider(result.status());
                 activeDlssProvider = new UnavailableDlssProvider(result.status());
+                activeDlssGProvider = new UnavailableDlssGProvider(result.status());
                 return;
             }
             lastUnavailableDetail.set(null);
@@ -79,6 +91,16 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                                 settings.optimalRenderWidth(), settings.optimalRenderHeight(),
                                 settings.renderWidthMin(), settings.renderHeightMin(),
                                 settings.renderWidthMax(), settings.renderHeightMax());
+                    }
+
+                    NvidiaFeatureStatus dlssGStatus = nativeDlssG.initialize(result.context());
+                    LOGGER.info("NVIDIA DLSS-G (Frame Generation) native initialization result: {}", dlssGStatus);
+                    if (dlssGStatus == NvidiaFeatureStatus.AVAILABLE) {
+                        activeDlssGProvider = nativeDlssG;
+                        DlssGState gState = nativeDlssG.getState();
+                        LOGGER.info("NVIDIA DLSS-G State: supported={}, maxFramesToGenerate={}, dynamicMfgSupported={}, estimatedVRAMUsage={} bytes",
+                                gState.supported(), gState.maxFramesToGenerate(),
+                                gState.dynamicMfgSupported(), gState.estimatedVramUsageInBytes());
                     }
 
                     initializedNative.set(true);
