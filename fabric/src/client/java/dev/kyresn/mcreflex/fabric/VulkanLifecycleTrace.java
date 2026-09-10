@@ -1,5 +1,7 @@
 package dev.kyresn.mcreflex.fabric;
 
+import dev.kyresn.mcreflex.nvidia.NativeReflexProvider;
+
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -33,11 +35,16 @@ public final class VulkanLifecycleTrace {
         }
 
         long elapsedNs = System.nanoTime() - presentStartNs;
+        int suppressedMarkers = 0;
+        if (McReflexToolsFabricClient.getReflexProvider() instanceof NativeReflexProvider nativeProvider) {
+            suppressedMarkers = nativeProvider.suppressedMarkerCount();
+        }
         McReflexToolsFabricClient.LOGGER.info(
-                "Vulkan lifecycle: frame={}, submits={}, presentDurationNs={}",
+                "Vulkan lifecycle: frame={}, submits={}, presentDurationNs={}, suppressedReflexMarkers={}",
                 currentFrame,
                 submitCount.getAndSet(0),
-                elapsedNs
+                elapsedNs,
+                suppressedMarkers
         );
     }
 }

@@ -52,6 +52,12 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
         NativeReflexProvider nativeReflex = new NativeReflexProvider();
         NativeDlssProvider nativeDlss = new NativeDlssProvider();
         NativeDlssGProvider nativeDlssG = new NativeDlssGProvider();
+
+        // Initialize the Streamline SDK as early as possible, before Minecraft's
+        // Vulkan device is used in earnest. The device itself is registered later,
+        // once the client reports an eligible Vulkan context.
+        NvidiaFeatureStatus sdkStatus = nativeReflex.initializeSdk();
+        LOGGER.info("Streamline SDK early initialization result: {}", sdkStatus);
         AtomicReference<FabricPresentationSnapshot> lastPresentation = new AtomicReference<>();
         AtomicReference<String> lastUnavailableDetail = new AtomicReference<>();
         AtomicBoolean initializedNative = new AtomicBoolean();

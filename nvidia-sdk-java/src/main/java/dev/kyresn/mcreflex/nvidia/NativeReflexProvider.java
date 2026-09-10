@@ -18,6 +18,18 @@ public final class NativeReflexProvider implements ReflexProvider {
         return nativeBridgeStatus();
     }
 
+    /**
+     * Initializes the Streamline SDK only. Call this before Minecraft creates its
+     * graphics device; the device is registered later by [initialize].
+     */
+    public NvidiaFeatureStatus initializeSdk() {
+        if (!NativeLibraryLoader.tryLoad()) {
+            return NvidiaFeatureStatus.MISSING_NATIVE_LIBRARY;
+        }
+        int result = nativeInitSdk();
+        return result == 0 ? NvidiaFeatureStatus.AVAILABLE : NvidiaFeatureStatus.SDK_INITIALIZATION_FAILED;
+    }
+
     @Override
     public NvidiaFeatureStatus initialize(MinecraftVulkanContext context) {
         if (!NativeLibraryLoader.tryLoad()) {
@@ -42,6 +54,14 @@ public final class NativeReflexProvider implements ReflexProvider {
             return ReflexState.unavailable();
         }
         return nativeGetReflexState();
+    }
+
+    /** Number of extra RenderSubmit markers dropped by the per-frame dedupe. */
+    public int suppressedMarkerCount() {
+        if (!initialized) {
+            return 0;
+        }
+        return nativeGetSuppressedMarkerCount();
     }
 
     /** Returns the last non-OK Streamline result code as a string, for diagnostics. */
@@ -75,10 +95,12 @@ public final class NativeReflexProvider implements ReflexProvider {
         }
     }
 
+    private static native int nativeInitSdk();
     private static native int nativeInitialize(long instance, long physicalDevice, long device,
                                                 long graphicsQueue, int queueFamilyIndex, long swapchain);
     private static native void nativeSetReflexOptions(int mode, int frameLimitFps);
     private static native ReflexState nativeGetReflexState();
+    private static native int nativeGetSuppressedMarkerCount();
     private static native String nativeLastSdkError();
     private static native NativeBridgeStatus nativeBridgeStatus();
     private static native void nativeSleep();

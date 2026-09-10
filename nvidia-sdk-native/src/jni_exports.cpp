@@ -47,6 +47,10 @@ constexpr jint kSuccess = 0;
 constexpr jint kUnavailable = 1;
 
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+// slInit() has completed. Set as early as possible (before the game creates its
+// graphics device) so Streamline can install its hooks in time.
+bool g_sdkInitialized = false;
+// slSetVulkanInfo() has completed and the SDK can resolve feature functions.
 bool g_initialized = false;
 bool g_dlssInitialized = false;
 bool g_dlssGInitialized = false;
@@ -54,6 +58,13 @@ bool g_dlssGInitialized = false;
 // frame start (nativeSleep) and reused by every marker for that frame, per the
 // Streamline Reflex/PCL contract: exactly one token per frame.
 sl::FrameToken* g_currentFrameToken = nullptr;
+// Render submission can be recorded more than once per frame, but the Reflex
+// marker contract expects exactly one RenderSubmit pair per presented frame.
+// 0 = idle, 1 = start emitted, 2 = end emitted.
+int g_renderSubmitState = 0;
+// Number of extra RenderSubmit markers dropped by the per-frame dedupe, for
+// diagnostics. Reset only on shutdown.
+int g_suppressedRenderSubmitCount = 0;
 // Holds the last non-OK Streamline result for diagnostics.
 int g_lastSdkError = 0;
 
@@ -71,6 +82,42 @@ constexpr uint32_t g_numFeaturesToLoad =
 // Plugin DLL search path (the Streamline SDK bin/x64 directory), populated from
 // the NVIDIA_STREAMLINE_ROOT environment variable.
 std::wstring g_pluginPath;
+
+// Initializes the Streamline SDK. Must run before the game creates its graphics
+// device; the device is registered afterwards by nativeInitialize.
+bool initStreamlineSdk() {
+    if (g_sdkInitialized) {
+        return true;
+    }
+
+    sl::Preferences pref{};
+    pref.showConsole = false;
+    pref.logLevel = sl::LogLevel::eDefault;
+    pref.featuresToLoad = g_featuresToLoad;
+    pref.numFeaturesToLoad = g_numFeaturesToLoad;
+
+    // Tell Streamline where its plugin DLLs (sl.reflex.dll, sl.pcl.dll, ...)
+    // live. Without this it searches next to the executable and finds nothing.
+    const char* sdkRoot = std::getenv("NVIDIA_STREAMLINE_ROOT");
+    if (sdkRoot != nullptr) {
+        g_pluginPath = std::wstring(sdkRoot, sdkRoot + std::strlen(sdkRoot));
+    } else {
+        g_pluginPath = L"<path-to-streamline-sdk-v2.14.1>";
+    }
+    g_pluginPath += L"\\bin\\x64";
+    const wchar_t* pluginPaths[] = { g_pluginPath.c_str() };
+    pref.pathsToPlugins = pluginPaths;
+    pref.numPathsToPlugins = 1;
+
+    sl::Result res = slInit(pref, sl::kSDKVersion);
+    if (res != sl::Result::eOk) {
+        g_lastSdkError = static_cast<int>(res);
+        return false;
+    }
+
+    g_sdkInitialized = true;
+    return true;
+}
 
 sl::PCLMarker toPclMarker(jint marker) {
     switch (marker) {
@@ -149,6 +196,15 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeBridgeStatus(JNIEnv* 
 }
 
 extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitSdk(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    return initStreamlineSdk() ? kSuccess : kUnavailable;
+#else
+    return kUnavailable;
+#endif
+}
+
+extern "C" JNIEXPORT jint JNICALL
 Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
         JNIEnv*, jclass, jlong instance, jlong physicalDevice, jlong device,
         jlong graphicsQueue, jint queueFamilyIndex, jlong swapchain) {
@@ -157,28 +213,8 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
         return kSuccess;
     }
 
-    sl::Preferences pref{};
-    pref.showConsole = false;
-    pref.logLevel = sl::LogLevel::eDefault;
-    pref.featuresToLoad = g_featuresToLoad;
-    pref.numFeaturesToLoad = g_numFeaturesToLoad;
-
-    // Tell Streamline where its plugin DLLs (sl.reflex.dll, sl.pcl.dll, ...)
-    // live. Without this it searches next to the executable and finds nothing.
-    const char* sdkRoot = std::getenv("NVIDIA_STREAMLINE_ROOT");
-    if (sdkRoot != nullptr) {
-        g_pluginPath = std::wstring(sdkRoot, sdkRoot + std::strlen(sdkRoot));
-    } else {
-        g_pluginPath = L"<path-to-streamline-sdk-v2.14.1>";
-    }
-    g_pluginPath += L"\\bin\\x64";
-    const wchar_t* pluginPaths[] = { g_pluginPath.c_str() };
-    pref.pathsToPlugins = pluginPaths;
-    pref.numPathsToPlugins = 1;
-
-    sl::Result res = slInit(pref, sl::kSDKVersion);
-    if (res != sl::Result::eOk) {
-        g_lastSdkError = static_cast<int>(res);
+    // Fallback for callers that skipped the early SDK init.
+    if (!initStreamlineSdk()) {
         return kUnavailable;
     }
 
@@ -194,7 +230,7 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
     vkInfo.graphicsQueueFamily = static_cast<uint32_t>(queueFamilyIndex);
     vkInfo.graphicsQueueIndex = 0;
 
-    res = slSetVulkanInfo(vkInfo);
+    sl::Result res = slSetVulkanInfo(vkInfo);
     if (res != sl::Result::eOk) {
         g_lastSdkError = static_cast<int>(res);
         return kUnavailable;
@@ -278,6 +314,7 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeSleep(JNIEnv*, jclass
     if (slGetNewFrameToken(g_currentFrameToken) != sl::Result::eOk || g_currentFrameToken == nullptr) {
         return;
     }
+    g_renderSubmitState = 0;
     slReflexSleep(*g_currentFrameToken);
 #endif
 }
@@ -286,6 +323,25 @@ extern "C" JNIEXPORT void JNICALL
 Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeMarker(JNIEnv*, jclass, jint marker) {
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
     if (!g_initialized || g_currentFrameToken == nullptr) return;
+
+    // Minecraft can record more than one queue submission per frame, but the
+    // Reflex marker contract wants exactly one RenderSubmit pair per presented
+    // frame. Keep the first pair and ignore the rest until the next frame.
+    constexpr jint kRenderSubmitStart = 3;
+    constexpr jint kRenderSubmitEnd = 4;
+    if (marker == kRenderSubmitStart) {
+        if (g_renderSubmitState != 0) {
+            g_suppressedRenderSubmitCount++;
+            return;
+        }
+        g_renderSubmitState = 1;
+    } else if (marker == kRenderSubmitEnd) {
+        if (g_renderSubmitState != 1) {
+            g_suppressedRenderSubmitCount++;
+            return;
+        }
+        g_renderSubmitState = 2;
+    }
 
     slPCLSetMarker(toPclMarker(marker), *g_currentFrameToken);
 #else
@@ -296,12 +352,26 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeMarker(JNIEnv*, jclas
 extern "C" JNIEXPORT void JNICALL
 Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeShutdown(JNIEnv*, jclass) {
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
-    if (g_initialized) {
+    if (g_sdkInitialized) {
         slShutdown();
+        g_sdkInitialized = false;
         g_initialized = false;
         g_dlssInitialized = false;
         g_dlssGInitialized = false;
+        g_currentFrameToken = nullptr;
+        g_renderSubmitState = 0;
+        g_suppressedRenderSubmitCount = 0;
     }
+#endif
+}
+
+// Number of extra RenderSubmit markers dropped by the per-frame dedupe.
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetSuppressedMarkerCount(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    return static_cast<jint>(g_suppressedRenderSubmitCount);
+#else
+    return 0;
 #endif
 }
 
