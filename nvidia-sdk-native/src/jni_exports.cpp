@@ -4,6 +4,7 @@
 #include <sl.h>
 #include <sl_reflex.h>
 #include <sl_pcl.h>
+#include <sl_dlss.h>
 #endif
 
 namespace {
@@ -13,6 +14,7 @@ constexpr jint kUnavailable = 1;
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
 bool g_initialized = false;
 uint64_t g_currentFrameIndex = 0;
+bool g_dlssInitialized = false;
 
 sl::PCLMarker toPclMarker(jint marker) {
     switch (marker) {
@@ -23,6 +25,19 @@ sl::PCLMarker toPclMarker(jint marker) {
         case 5: return sl::PCLMarker::ePresentStart;
         case 6: return sl::PCLMarker::ePresentEnd;
         default: return sl::PCLMarker::eSimulationStart;
+    }
+}
+
+sl::DLSSMode toDlssMode(jint mode) {
+    switch (mode) {
+        case 0: return sl::DLSSMode::eOff;
+        case 1: return sl::DLSSMode::eMaxPerformance;
+        case 2: return sl::DLSSMode::eBalanced;
+        case 3: return sl::DLSSMode::eMaxQuality;
+        case 4: return sl::DLSSMode::eUltraPerformance;
+        case 5: return sl::DLSSMode::eUltraQuality;
+        case 6: return sl::DLSSMode::eDLAA;
+        default: return sl::DLSSMode::eOff;
     }
 }
 #endif
@@ -128,6 +143,98 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeShutdown(JNIEnv*, jcl
     if (g_initialized) {
         slShutdown();
         g_initialized = false;
+        g_dlssInitialized = false;
     }
+#endif
+}
+
+// -----------------------------------------------------------------------------
+// DLSS Super Resolution Native Implementations
+// -----------------------------------------------------------------------------
+
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeDlssProvider_nativeDlssInitialize(
+        JNIEnv* env, jclass, jlong instance, jlong physicalDevice, jlong device,
+        jlong graphicsQueue, jint queueFamilyIndex, jlong swapchain) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (g_dlssInitialized) {
+        return kSuccess;
+    }
+
+    if (!g_initialized) {
+        jint reflexInit = Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitialize(
+                env, nullptr, instance, physicalDevice, device, graphicsQueue, queueFamilyIndex, swapchain);
+        if (reflexInit != kSuccess) {
+            return reflexInit;
+        }
+    }
+
+    g_dlssInitialized = true;
+    return kSuccess;
+#else
+    (void)env; (void)instance; (void)physicalDevice; (void)device;
+    (void)graphicsQueue; (void)queueFamilyIndex; (void)swapchain;
+    return kUnavailable;
+#endif
+}
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeDlssProvider_nativeGetOptimalSettings(
+        JNIEnv* env, jclass, jint mode, jint outputWidth, jint outputHeight) {
+    jclass settingsClass = env->FindClass("dev/kyresn/mcreflex/api/DlssOptimalSettings");
+    if (settingsClass == nullptr) return nullptr;
+
+    jmethodID constructor = env->GetMethodID(settingsClass, "<init>", "(IIFIIII)V");
+    if (constructor == nullptr) return nullptr;
+
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (g_dlssInitialized) {
+        sl::DLSSOptions options{};
+        options.mode = toDlssMode(mode);
+        options.outputWidth = static_cast<uint32_t>(outputWidth);
+        options.outputHeight = static_cast<uint32_t>(outputHeight);
+
+        sl::DLSSOptimalSettings settings{};
+        if (slDLSSGetOptimalSettings(options, settings) == sl::Result::eOk) {
+            return env->NewObject(settingsClass, constructor,
+                                  static_cast<jint>(settings.optimalRenderWidth),
+                                  static_cast<jint>(settings.optimalRenderHeight),
+                                  static_cast<jfloat>(settings.optimalSharpness),
+                                  static_cast<jint>(settings.renderWidthMin),
+                                  static_cast<jint>(settings.renderHeightMin),
+                                  static_cast<jint>(settings.renderWidthMax),
+                                  static_cast<jint>(settings.renderHeightMax));
+        }
+    }
+#endif
+
+    return env->NewObject(settingsClass, constructor,
+                          outputWidth, outputHeight, 0.0f,
+                          outputWidth, outputHeight, outputWidth, outputHeight);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeDlssProvider_nativeSetOptions(
+        JNIEnv*, jclass, jint mode, jint outputWidth, jint outputHeight) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (!g_dlssInitialized) return;
+
+    sl::DLSSOptions options{};
+    options.mode = toDlssMode(mode);
+    options.outputWidth = static_cast<uint32_t>(outputWidth);
+    options.outputHeight = static_cast<uint32_t>(outputHeight);
+    options.colorBuffersHDR = sl::Boolean::eFalse;
+
+    sl::ViewportHandle viewport{ 0 };
+    slDLSSSetOptions(viewport, options);
+#else
+    (void)mode; (void)outputWidth; (void)outputHeight;
+#endif
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeDlssProvider_nativeDlssShutdown(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    g_dlssInitialized = false;
 #endif
 }
