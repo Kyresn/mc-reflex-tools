@@ -7,6 +7,10 @@
 *.sh text eol=lf
 gradlew text eol=lf
 
+# `sha256sum -c` treats a trailing CR as part of the filename, and text=auto
+# checks this file out as CRLF on Windows - where the release build runs.
+*.sha256 text eol=lf
+
 # Windows-only batch files want CRLF.
 *.bat text eol=crlf
 *.cmd text eol=crlf
