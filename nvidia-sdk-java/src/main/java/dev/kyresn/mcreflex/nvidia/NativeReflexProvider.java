@@ -3,6 +3,7 @@ package dev.kyresn.mcreflex.nvidia;
 import dev.kyresn.mcreflex.api.MinecraftVulkanContext;
 import dev.kyresn.mcreflex.api.NativeBridgeStatus;
 import dev.kyresn.mcreflex.api.NvidiaFeatureStatus;
+import dev.kyresn.mcreflex.api.ReflexLatencyReport;
 import dev.kyresn.mcreflex.api.ReflexMode;
 import dev.kyresn.mcreflex.api.ReflexProvider;
 import dev.kyresn.mcreflex.api.ReflexState;
@@ -64,6 +65,80 @@ public final class NativeReflexProvider implements ReflexProvider {
         return nativeGetSuppressedMarkerCount();
     }
 
+    /** Number of markers that arrived out of the expected per-frame order. */
+    public int markerOrderViolationCount() {
+        if (!initialized) {
+            return 0;
+        }
+        return nativeGetMarkerOrderViolationCount();
+    }
+
+    /** Number of markers dropped because no frame token was available. */
+    public int staleMarkerCount() {
+        if (!initialized) {
+            return 0;
+        }
+        return nativeGetStaleMarkerCount();
+    }
+
+    /** Number of slReflexSleep calls; should advance by one per rendered frame. */
+    public int sleepCount() {
+        if (!initialized) {
+            return 0;
+        }
+        return nativeGetSleepCount();
+    }
+
+    /**
+     * Answers the driver's periodic latency ping so it can measure input sampling
+     * latency. {@code windowHandle} is the GLFW window handle; measured latency
+     * without this stays incomplete.
+     *
+     * @return true when the window was hooked and the ping marker is being sent
+     */
+    public boolean installPclPingHook(long windowHandle) {
+        if (!initialized) {
+            return false;
+        }
+        return nativeInstallPclPingHook(windowHandle) == 0;
+    }
+
+    /** Number of ePCLatencyPing markers sent in answer to the driver's message. */
+    public int pclPingCount() {
+        if (!initialized) {
+            return 0;
+        }
+        return nativeGetPclPingCount();
+    }
+
+    /** Number of pings seen with no frame token, so they could not be attributed. */
+    public int pclPingMissedCount() {
+        if (!initialized) {
+            return 0;
+        }
+        return nativeGetPclPingMissedCount();
+    }
+
+    /**
+     * Returns and clears any Streamline plugin messages queued since the last
+     * call, oldest first. Empty when nothing new was reported.
+     */
+    public String drainSdkMessages() {
+        if (!NativeLibraryLoader.tryLoad()) {
+            return "";
+        }
+        return nativeDrainSdkMessages();
+    }
+
+    /** Latest driver-published latency report, or an unavailable placeholder. */
+    public ReflexLatencyReport getLatencyReport() {
+        if (!initialized) {
+            return ReflexLatencyReport.unavailable();
+        }
+        ReflexLatencyReport report = nativeGetLatencyReport();
+        return report != null ? report : ReflexLatencyReport.unavailable();
+    }
+
     /** Returns the last non-OK Streamline result code as a string, for diagnostics. */
     public String lastSdkError() {
         if (!NativeLibraryLoader.tryLoad()) {
@@ -100,7 +175,15 @@ public final class NativeReflexProvider implements ReflexProvider {
                                                 long graphicsQueue, int queueFamilyIndex, long swapchain);
     private static native void nativeSetReflexOptions(int mode, int frameLimitFps);
     private static native ReflexState nativeGetReflexState();
+    private static native ReflexLatencyReport nativeGetLatencyReport();
     private static native int nativeGetSuppressedMarkerCount();
+    private static native int nativeGetMarkerOrderViolationCount();
+    private static native int nativeGetStaleMarkerCount();
+    private static native int nativeGetSleepCount();
+    private static native int nativeInstallPclPingHook(long windowHandle);
+    private static native int nativeGetPclPingCount();
+    private static native int nativeGetPclPingMissedCount();
+    private static native String nativeDrainSdkMessages();
     private static native String nativeLastSdkError();
     private static native NativeBridgeStatus nativeBridgeStatus();
     private static native void nativeSleep();

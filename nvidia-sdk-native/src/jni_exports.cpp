@@ -1,6 +1,17 @@
 #include <jni.h>
+#include <cerrno>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <deque>
+#include <mutex>
 #include <string>
+#include <vector>
+
+#ifdef _WIN32
+#include <direct.h>
+#include <windows.h>
+#endif
 
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
 #include <sl.h>
@@ -65,8 +76,82 @@ int g_renderSubmitState = 0;
 // Number of extra RenderSubmit markers dropped by the per-frame dedupe, for
 // diagnostics. Reset only on shutdown.
 int g_suppressedRenderSubmitCount = 0;
+// Marker id (1..6) of the last marker accepted for the current frame, used to
+// detect out-of-order or duplicated markers. Reset at every frame start.
+int g_lastAcceptedMarker = 0;
+// Number of markers that arrived out of the expected SimulationStart ->
+// SimulationEnd -> RenderSubmitStart -> RenderSubmitEnd -> PresentStart ->
+// PresentEnd order.
+int g_markerOrderViolationCount = 0;
+// Markers dropped because no frame token was available (either slReflexSleep has
+// not run yet or slGetNewFrameToken failed).
+int g_staleMarkerCount = 0;
+// Number of times slReflexSleep has been called, and the last result it returned.
+int g_sleepCount = 0;
+int g_lastSleepResult = 0;
 // Holds the last non-OK Streamline result for diagnostics.
 int g_lastSdkError = 0;
+
+#ifdef _WIN32
+// The driver measures input sampling latency by posting a periodic message to
+// the game window; the application must answer it with ePCLatencyPing. Minecraft
+// hands its window entirely to GLFW, so the window procedure has to be
+// subclassed to observe that message at all.
+HWND g_hookedWindow = nullptr;
+WNDPROC g_previousWndProc = nullptr;
+uint32_t g_pclPingMessageId = 0;
+LONG g_pclPingCount = 0;
+LONG g_pclPingMissedCount = 0;
+
+// Window procedure installed over GLFW's own. Runs on the thread that pumps
+// messages, which is the game thread inside RenderSystem.pollEvents().
+LRESULT CALLBACK mcReflexToolsWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (g_pclPingMessageId != 0 && msg == static_cast<UINT>(g_pclPingMessageId)) {
+        // slReflexSleep has already claimed the frame token for the frame in
+        // flight, so the ping belongs to that frame and needs no index bump.
+        if (g_currentFrameToken != nullptr) {
+            slPCLSetMarker(sl::PCLMarker::ePCLatencyPing, *g_currentFrameToken);
+            InterlockedIncrement(&g_pclPingCount);
+        } else {
+            InterlockedIncrement(&g_pclPingMissedCount);
+        }
+    }
+
+    if (g_previousWndProc != nullptr) {
+        return CallWindowProcW(g_previousWndProc, hwnd, msg, wParam, lParam);
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+#endif
+
+// Most recent messages reported by the Streamline plugins, oldest first. The
+// SDK invokes logMessageCallback from its own threads, so this ring is guarded
+// and drained from the game thread; the callback never touches the JVM.
+constexpr size_t kMaxSdkLogMessages = 64;
+std::deque<std::string> g_sdkLogMessages;
+std::mutex g_sdkLogMutex;
+
+// Receives every Streamline plugin log message. Runs on SDK threads, so it must
+// stay allocation-light and must not call into the JVM. The message pointer is
+// only valid for the duration of the call, hence the copy.
+void streamlineLogCallback(sl::LogType type, const char* msg) {
+    if (msg == nullptr) {
+        return;
+    }
+
+    const char* prefix = "INFO";
+    if (type == sl::LogType::eWarn) {
+        prefix = "WARN";
+    } else if (type == sl::LogType::eError) {
+        prefix = "ERROR";
+    }
+
+    std::lock_guard<std::mutex> lock(g_sdkLogMutex);
+    if (g_sdkLogMessages.size() >= kMaxSdkLogMessages) {
+        g_sdkLogMessages.pop_front();
+    }
+    g_sdkLogMessages.emplace_back(std::string("[SL ") + prefix + "] " + msg);
+}
 
 // Features must be explicitly requested in sl::Preferences::featuresToLoad;
 // otherwise no plugin is loaded and every feature call reports eErrorFeatureMissing.
@@ -82,6 +167,29 @@ constexpr uint32_t g_numFeaturesToLoad =
 // Plugin DLL search path (the Streamline SDK bin/x64 directory), populated from
 // the NVIDIA_STREAMLINE_ROOT environment variable.
 std::wstring g_pluginPath;
+// Directory Streamline writes its own log files to.
+std::wstring g_logPath;
+
+// Absolute directory where Streamline should drop its log files: the process
+// working directory (the Minecraft run directory) plus a dedicated subfolder.
+// Streamline opens its log with _wfsopen and gives up permanently if the open
+// fails, so the directory has to exist before slInit runs.
+std::wstring resolveLogPath() {
+#ifdef _WIN32
+    wchar_t buffer[4096] = {};
+    if (_wgetcwd(buffer, 4096) != nullptr) {
+        std::wstring path(buffer);
+        path += L"\\mc_reflex_tools_logs";
+        if (_wmkdir(path.c_str()) == 0 || errno == EEXIST) {
+            return path;
+        }
+        // Could not create the subfolder; the working directory itself still
+        // works and is writable.
+        return std::wstring(buffer);
+    }
+#endif
+    return L"";
+}
 
 // Initializes the Streamline SDK. Must run before the game creates its graphics
 // device; the device is registered afterwards by nativeInitialize.
@@ -95,6 +203,12 @@ bool initStreamlineSdk() {
     pref.logLevel = sl::LogLevel::eDefault;
     pref.featuresToLoad = g_featuresToLoad;
     pref.numFeaturesToLoad = g_numFeaturesToLoad;
+    // Surface plugin warnings/errors in the game log and let the SDK write its
+    // own files. Without these the integration is blind when a plugin silently
+    // declines to engage, which is exactly what a PCL of 0.0 looks like.
+    pref.logMessageCallback = &streamlineLogCallback;
+    g_logPath = resolveLogPath();
+    pref.pathToLogsAndData = g_logPath.c_str();
 
     // Tell Streamline where its plugin DLLs (sl.reflex.dll, sl.pcl.dll, ...)
     // live. Without this it searches next to the executable and finds nothing.
@@ -310,19 +424,34 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeSleep(JNIEnv*, jclass
     if (!g_initialized) return;
 
     // Start a new frame: fetch exactly one fresh token and reuse it for every
-    // marker this frame.
-    if (slGetNewFrameToken(g_currentFrameToken) != sl::Result::eOk || g_currentFrameToken == nullptr) {
+    // marker this frame. The caller places this call immediately before the
+    // frame's input is sampled, which is where Reflex expects to sleep.
+    g_currentFrameToken = nullptr;
+    g_renderSubmitState = 0;
+    g_lastAcceptedMarker = 0;
+
+    sl::Result res = slGetNewFrameToken(g_currentFrameToken);
+    if (res != sl::Result::eOk || g_currentFrameToken == nullptr) {
+        g_lastSdkError = static_cast<int>(res);
         return;
     }
-    g_renderSubmitState = 0;
-    slReflexSleep(*g_currentFrameToken);
+
+    g_lastSleepResult = static_cast<int>(slReflexSleep(*g_currentFrameToken));
+    g_sleepCount++;
 #endif
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeMarker(JNIEnv*, jclass, jint marker) {
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
-    if (!g_initialized || g_currentFrameToken == nullptr) return;
+    if (!g_initialized) return;
+
+    if (g_currentFrameToken == nullptr) {
+        // No token for this frame: either slReflexSleep has not run yet or
+        // slGetNewFrameToken failed. The marker cannot be attributed to a frame.
+        g_staleMarkerCount++;
+        return;
+    }
 
     // Minecraft can record more than one queue submission per frame, but the
     // Reflex marker contract wants exactly one RenderSubmit pair per presented
@@ -343,6 +472,14 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeMarker(JNIEnv*, jclas
         g_renderSubmitState = 2;
     }
 
+    // Within one frame the accepted markers must be strictly increasing:
+    // SimulationStart -> SimulationEnd -> RenderSubmitStart -> RenderSubmitEnd
+    // -> PresentStart -> PresentEnd.
+    if (marker <= g_lastAcceptedMarker) {
+        g_markerOrderViolationCount++;
+    }
+    g_lastAcceptedMarker = marker;
+
     slPCLSetMarker(toPclMarker(marker), *g_currentFrameToken);
 #else
     (void)marker;
@@ -353,6 +490,17 @@ extern "C" JNIEXPORT void JNICALL
 Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeShutdown(JNIEnv*, jclass) {
 #ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
     if (g_sdkInitialized) {
+#ifdef _WIN32
+        if (g_hookedWindow != nullptr && g_previousWndProc != nullptr) {
+            SetWindowLongPtrW(g_hookedWindow, GWLP_WNDPROC,
+                              reinterpret_cast<LONG_PTR>(g_previousWndProc));
+        }
+        g_hookedWindow = nullptr;
+        g_previousWndProc = nullptr;
+        g_pclPingMessageId = 0;
+        g_pclPingCount = 0;
+        g_pclPingMissedCount = 0;
+#endif
         slShutdown();
         g_sdkInitialized = false;
         g_initialized = false;
@@ -361,6 +509,11 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeShutdown(JNIEnv*, jcl
         g_currentFrameToken = nullptr;
         g_renderSubmitState = 0;
         g_suppressedRenderSubmitCount = 0;
+        g_lastAcceptedMarker = 0;
+        g_markerOrderViolationCount = 0;
+        g_staleMarkerCount = 0;
+        g_sleepCount = 0;
+        g_lastSleepResult = 0;
     }
 #endif
 }
@@ -373,6 +526,200 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetSuppressedMarkerCo
 #else
     return 0;
 #endif
+}
+
+// Number of markers that arrived out of the expected per-frame order.
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetMarkerOrderViolationCount(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    return static_cast<jint>(g_markerOrderViolationCount);
+#else
+    return 0;
+#endif
+}
+
+// Number of markers dropped because no frame token was available for the frame.
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetStaleMarkerCount(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    return static_cast<jint>(g_staleMarkerCount);
+#else
+    return 0;
+#endif
+}
+
+// Number of slReflexSleep calls, so the caller can prove it happens once per frame.
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetSleepCount(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    return static_cast<jint>(g_sleepCount);
+#else
+    return 0;
+#endif
+}
+
+// Installs the PCL latency-ping handler over the game window. `windowHandle` is
+// the GLFW window handle; the Win32 HWND and the driver's ping message id are
+// resolved here so the Java side does not need either.
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInstallPclPingHook(
+        JNIEnv*, jclass, jlong windowHandle) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (!g_initialized || windowHandle == 0) {
+        return kUnavailable;
+    }
+
+#ifdef _WIN32
+    HWND hwnd = reinterpret_cast<HWND>(windowHandle);
+    if (g_hookedWindow == hwnd) {
+        return kSuccess;
+    }
+
+    sl::ReflexState state{};
+    if (slReflexGetState(state) != sl::Result::eOk) {
+        return kUnavailable;
+    }
+    if (state.statsWindowMessage == 0) {
+        // The driver is not publishing a ping message, so there is nothing to
+        // listen for. Not an error: this is the case outside Reflex measurement.
+        return kUnavailable;
+    }
+
+    if (g_hookedWindow != nullptr && g_previousWndProc != nullptr) {
+        SetWindowLongPtrW(g_hookedWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(g_previousWndProc));
+        g_hookedWindow = nullptr;
+        g_previousWndProc = nullptr;
+    }
+
+    g_pclPingMessageId = state.statsWindowMessage;
+    SetLastError(0);
+    LONG_PTR previous = SetWindowLongPtrW(hwnd, GWLP_WNDPROC,
+                                          reinterpret_cast<LONG_PTR>(&mcReflexToolsWindowProc));
+    if (previous == 0 && GetLastError() != 0) {
+        g_pclPingMessageId = 0;
+        return kUnavailable;
+    }
+
+    g_previousWndProc = reinterpret_cast<WNDPROC>(previous);
+    g_hookedWindow = hwnd;
+    return kSuccess;
+#else
+    return kUnavailable;
+#endif
+#else
+    (void)windowHandle;
+    return kUnavailable;
+#endif
+}
+
+// Number of ePCLatencyPing markers emitted in response to the driver's message.
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetPclPingCount(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+#ifdef _WIN32
+    return static_cast<jint>(InterlockedCompareExchange(&g_pclPingCount, 0, 0));
+#else
+    return 0;
+#endif
+#else
+    return 0;
+#endif
+}
+
+// Number of pings seen before a frame token existed, which means the marker
+// could not be attributed and the input sampling latency went unmeasured.
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetPclPingMissedCount(JNIEnv*, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+#ifdef _WIN32
+    return static_cast<jint>(InterlockedCompareExchange(&g_pclPingMissedCount, 0, 0));
+#else
+    return 0;
+#endif
+#else
+    return 0;
+#endif
+}
+
+// Drains the queued Streamline plugin log messages, oldest first, and clears the
+// queue. Returns an empty string when nothing new arrived since the last drain.
+extern "C" JNIEXPORT jstring JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeDrainSdkMessages(JNIEnv* env, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    std::string joined;
+    {
+        std::lock_guard<std::mutex> lock(g_sdkLogMutex);
+        for (const std::string& message : g_sdkLogMessages) {
+            if (!joined.empty()) {
+                joined += '\n';
+            }
+            joined += message;
+        }
+        g_sdkLogMessages.clear();
+    }
+    return env->NewStringUTF(joined.c_str());
+#else
+    return env->NewStringUTF("");
+#endif
+}
+
+// Latest per-frame latency report from the Reflex plugin. This is the in-app
+// equivalent of the Reflex verification HUD: it is populated by the driver from
+// the PCL markers and needs no driver app profile to read back.
+extern "C" JNIEXPORT jobject JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetLatencyReport(JNIEnv* env, jclass) {
+    jclass reportClass = env->FindClass("dev/kyresn/mcreflex/api/ReflexLatencyReport");
+    if (reportClass == nullptr) return nullptr;
+
+    jmethodID constructor = env->GetMethodID(reportClass, "<init>", "(ZJJJJJJJJJJJJJJJJ)V");
+    if (constructor == nullptr) return nullptr;
+
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (g_initialized) {
+        sl::ReflexState state{};
+        if (slReflexGetState(state) == sl::Result::eOk && state.latencyReportAvailable) {
+            // Pick the newest entry that has been through a present. Entries the
+            // driver has not filled in yet carry frameID 0 or a zero present time.
+            const sl::ReflexReport* latest = nullptr;
+            for (int i = 0; i < sl::kReflexFrameReportCount; i++) {
+                const sl::ReflexReport& candidate = state.frameReport[i];
+                if (candidate.frameID == 0 || candidate.presentEndTime == 0) {
+                    continue;
+                }
+                if (latest == nullptr ||
+                    static_cast<int64_t>(candidate.frameID - latest->frameID) > 0) {
+                    latest = &candidate;
+                }
+            }
+
+            if (latest != nullptr) {
+                return env->NewObject(reportClass, constructor,
+                                      JNI_TRUE,
+                                      static_cast<jlong>(latest->frameID),
+                                      static_cast<jlong>(latest->inputSampleTime),
+                                      static_cast<jlong>(latest->simStartTime),
+                                      static_cast<jlong>(latest->simEndTime),
+                                      static_cast<jlong>(latest->renderSubmitStartTime),
+                                      static_cast<jlong>(latest->renderSubmitEndTime),
+                                      static_cast<jlong>(latest->presentStartTime),
+                                      static_cast<jlong>(latest->presentEndTime),
+                                      static_cast<jlong>(latest->driverStartTime),
+                                      static_cast<jlong>(latest->driverEndTime),
+                                      static_cast<jlong>(latest->osRenderQueueStartTime),
+                                      static_cast<jlong>(latest->osRenderQueueEndTime),
+                                      static_cast<jlong>(latest->gpuRenderStartTime),
+                                      static_cast<jlong>(latest->gpuRenderEndTime),
+                                      static_cast<jlong>(latest->gpuActiveRenderTimeUs),
+                                      static_cast<jlong>(latest->gpuFrameTimeUs));
+            }
+        }
+    }
+#endif
+
+    return env->NewObject(reportClass, constructor,
+                          JNI_FALSE,
+                          0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L,
+                          0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
 }
 
 // -----------------------------------------------------------------------------

@@ -25,6 +25,14 @@ dependencies {
     implementation(project(":common-api"))
     implementation(project(":vulkan-context"))
     implementation(project(":nvidia-sdk-java"))
+
+    // Nest the sibling modules inside the mod jar. Without this the embedded
+    // native bridge (nvidia-sdk-java/src/main/resources/natives) never reaches
+    // the classpath of a distributed build, and NativeLibraryLoader falls back
+    // to a developer-only workspace lookup.
+    include(project(":common-api"))
+    include(project(":vulkan-context"))
+    include(project(":nvidia-sdk-java"))
 }
 
 tasks.processResources {

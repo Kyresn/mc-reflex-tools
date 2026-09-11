@@ -6,6 +6,7 @@
     "GpuDeviceAccessor",
     "GpuSurfaceAccessor",
     "MinecraftSimulationLifecycleMixin",
+    "RenderSystemPollEventsMixin",
     "VulkanDevicePhysicalDeviceMixin",
     "VulkanGpuSurfaceAccessor",
     "VulkanGpuSurfacePresentationMixin",

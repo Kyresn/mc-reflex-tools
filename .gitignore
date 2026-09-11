@@ -30,6 +30,13 @@ nvidia-sdk-native/out/
 *.so
 *.dylib
 
+# ...except the native bridge that is embedded in the mod jar. It is a build
+# input, not a build output, so a fresh clone must contain it.
+!nvidia-sdk-java/src/main/resources/natives/windows-x64/*.dll
+
+# Streamline plugin logs written next to the Minecraft run directory
+mc_reflex_tools_logs/
+
 # Java
 *.class
 hs_err_*.log

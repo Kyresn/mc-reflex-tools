@@ -17,6 +17,8 @@ import dev.kyresn.mcreflex.nvidia.UnavailableDlssProvider;
 import dev.kyresn.mcreflex.nvidia.UnavailableReflexProvider;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.minecraft.client.Minecraft;
+import org.lwjgl.glfw.GLFWNativeWin32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,9 +62,12 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
         LOGGER.info("Streamline SDK early initialization result: {}", sdkStatus);
         AtomicReference<FabricPresentationSnapshot> lastPresentation = new AtomicReference<>();
         AtomicReference<String> lastUnavailableDetail = new AtomicReference<>();
+        AtomicReference<String> lastAppliedReflexOptions = new AtomicReference<>();
         AtomicBoolean initializedNative = new AtomicBoolean();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            logPendingSdkMessages(nativeReflex);
+
             VulkanProbeResult result = resolver.probe();
             if (!result.isAvailable()) {
                 String unavailableDetail = result.status() + ":" + result.renderer() + ":" + result.detail();
@@ -90,6 +95,7 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                         dev.kyresn.mcreflex.api.ReflexState reflexState = nativeReflex.getReflexState();
                         LOGGER.info("NVIDIA Reflex state: lowLatencyAvailable={}, flashIndicatorDriverControlled={}",
                                 reflexState.lowLatencyAvailable(), reflexState.flashIndicatorDriverControlled());
+                        installPclPingHook(client, nativeReflex);
                     } else {
                         LOGGER.warn("NVIDIA Reflex failed to initialize, SDK error: {}", nativeReflex.lastSdkError());
                     }
@@ -119,6 +125,20 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                 }
             }
 
+            // Reflex options are re-applied whenever the desired configuration
+            // changes, not only when the window changes. The SDK requires
+            // slReflexSetOptions to be called at least once even when Reflex is
+            // off, and again after every runtime option change.
+            if (activeReflexProvider instanceof NativeReflexProvider) {
+                ModConfig config = ModConfig.get();
+                int targetLimitFps = config.customFrameLimitFps;
+                String desiredOptions = config.reflexMode + "@" + targetLimitFps;
+                if (!desiredOptions.equals(lastAppliedReflexOptions.getAndSet(desiredOptions))) {
+                    activeReflexProvider.setOptions(config.reflexMode, targetLimitFps);
+                    LOGGER.info("Applied Reflex options: mode={}, frameLimitFps={}", config.reflexMode, targetLimitFps);
+                }
+            }
+
             Optional<FabricPresentationSnapshot> captured = FabricPresentationSnapshot.capture(result);
             if (captured.isEmpty()) {
                 return;
@@ -128,16 +148,6 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
             FabricPresentationSnapshot previous = lastPresentation.getAndSet(presentation);
             if (presentation.equals(previous)) {
                 return;
-            }
-
-            // G-SYNC automatic frame limiting was removed. Only a manual
-            // customFrameLimitFps value is forwarded to the Reflex driver limiter.
-            ModConfig config = ModConfig.get();
-            int targetLimitFps = config.customFrameLimitFps;
-
-            if (activeReflexProvider instanceof NativeReflexProvider) {
-                activeReflexProvider.setOptions(config.reflexMode, targetLimitFps);
-                LOGGER.info("Applied Reflex options: mode={}, frameLimitFps={}", config.reflexMode, targetLimitFps);
             }
 
             LOGGER.info(
@@ -163,5 +173,48 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                     presentation.presentMode()
             );
         });
+    }
+
+    /**
+     * Subscribes to the driver's periodic latency ping.
+     *
+     * <p>The driver measures input sampling latency by posting a message to the
+     * game window, which the application has to answer with an
+     * {@code ePCLatencyPing} marker. Minecraft leaves the window procedure to
+     * GLFW, so the native bridge subclasses it. Without this the input sampling
+     * component of PC latency is never measured and Reflex reports 0.0.
+     */
+    private static void installPclPingHook(Minecraft client, NativeReflexProvider provider) {
+        long glfwWindow = client.getWindow().handle();
+        long win32Window = GLFWNativeWin32.glfwGetWin32Window(glfwWindow);
+        if (win32Window == 0L) {
+            LOGGER.warn("PCL latency ping hook skipped: no Win32 window for GLFW handle 0x{}",
+                    Long.toHexString(glfwWindow));
+            return;
+        }
+
+        if (provider.installPclPingHook(win32Window)) {
+            LOGGER.info("PCL latency ping hook installed on window 0x{}", Long.toHexString(win32Window));
+        } else {
+            LOGGER.warn("PCL latency ping hook not installed: the driver is not publishing a ping message yet. "
+                    + "Input sampling latency will stay unmeasured until Reflex measurement starts.");
+        }
+    }
+
+    /**
+     * Forwards warnings and errors the Streamline plugins reported on their own
+     * threads into the game log. Without this a plugin that silently declines to
+     * engage is invisible.
+     */
+    private static void logPendingSdkMessages(NativeReflexProvider provider) {
+        String messages = provider.drainSdkMessages();
+        if (messages == null || messages.isEmpty()) {
+            return;
+        }
+        for (String line : messages.split("\n")) {
+            if (!line.isBlank()) {
+                LOGGER.info("{}", line);
+            }
+        }
     }
 }
