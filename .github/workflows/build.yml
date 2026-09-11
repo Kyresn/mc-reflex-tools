@@ -22,6 +22,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build Fabric artifact
         run: ./gradlew :fabric:build --no-daemon
+      # Downloadable from the run's summary page. Tagged builds go through
+      # release.yml instead, which attaches the same jars to a prerelease.
+      - name: Upload the mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: mc_reflex_tools-fabric
+          path: fabric/build/libs/*.jar
+          if-no-files-found: error
 
   native-bridge:
     name: Native bridge compiles

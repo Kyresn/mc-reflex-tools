@@ -1,5 +1,7 @@
 # MC Reflex Tools
 
+**English** | [简体中文](README.zh-CN.md)
+
 NVIDIA Reflex Low Latency in Minecraft Java Edition 26.2, driven through Minecraft's native
 Vulkan renderer and the official NVIDIA Streamline SDK.
 
@@ -63,6 +65,15 @@ unchanged.
 The jar lands in `fabric/build/libs/`. It embeds a prebuilt native bridge, so this works
 without a C++ toolchain. To rebuild that bridge from source — required after editing
 `nvidia-sdk-native/src/jni_exports.cpp` — see [docs/native-build.md](docs/native-build.md).
+
+## Automatic builds and releases
+
+Every push to `main` is built on GitHub Actions, and the jar is uploaded as a run artifact you
+can download from that run's summary page.
+
+Pushing a tag such as `v0.1.0-SNAPSHOT` — it must equal `mod_version` in `gradle.properties`
+— runs [release.yml](.github/workflows/release.yml), which builds and publishes a
+**prerelease** with the jar attached. Every build is a snapshot for now.
 
 ## Run the development client
 

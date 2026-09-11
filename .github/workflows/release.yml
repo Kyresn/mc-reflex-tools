@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Only this workflow needs write access, and only to create the release itself.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish prerelease
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+
+      # A release that does not carry the version in gradle.properties is a mistake
+      # people only discover after downloading it.
+      - name: Tag matches mod_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(grep -E '^mod_version=' gradle.properties | cut -d= -f2)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match mod_version=$version. Expected tag v$version."
+            exit 1
+          fi
+          echo "Tag matches mod_version=$version"
+
+      # Shipping a stale or truncated native bridge is the failure this project is
+      # most exposed to, so gate the release on it. See docs/native-build.md for what
+      # these checks do and do not prove.
+      - name: Native artifact is intact
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c nvidia-sdk-native/native-artifact.sha256
+          dll=nvidia-sdk-java/src/main/resources/natives/windows-x64/mc_reflex_tools_native.dll
+          src=$(git log -1 --format=%H -- nvidia-sdk-native/src/jni_exports.cpp nvidia-sdk-native/CMakeLists.txt)
+          bin=$(git log -1 --format=%H -- "$dll")
+          if ! git merge-base --is-ancestor "$src" "$bin"; then
+            echo "::error::The bridge source is newer than the checked-in binary. Rebuild it and commit the result."
+            exit 1
+          fi
+
+      - name: Build Fabric artifact
+        run: ./gradlew :fabric:build --no-daemon
+
+      - name: Create the prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --prerelease \
+            --generate-notes \
+            fabric/build/libs/*.jar

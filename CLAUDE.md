@@ -151,5 +151,6 @@ DLSS still only initializes, and not even that: `slInit` is called without an `a
 - Architecture decisions are recorded in `docs/architecture.md` (AD-001 onward). Update them when the design shifts.
 - All NVIDIA-feature integration is additive behind graceful "unavailable" fallback: on any failure, the game keeps running unchanged.
 - **Never commit NVIDIA SDK files.** No Streamline headers, import libraries, or plugin DLLs. `NOTICE.md` explains why and the `redistribution-guard` CI job enforces it. The one permitted binary is our own `mc_reflex_tools_native.dll`, built from this repository's source.
-- Editing `nvidia-sdk-native/src/jni_exports.cpp` means rebuilding and recommitting that DLL, or the `native-dll-freshness` CI job fails. The toolchain is recorded in `docs/native-build.md`.
+- Editing `nvidia-sdk-native/src/jni_exports.cpp` or its `CMakeLists.txt` means rebuilding and recommitting the DLL, then updating `nvidia-sdk-native/native-artifact.sha256`, or the `native-artifact-integrity` CI job fails. The toolchain and the local verification script are in `docs/native-build.md`.
+- Releasing is a tag push: `git tag v$mod_version && git push origin v$mod_version`. `release.yml` refuses a tag that does not match `mod_version` and publishes a prerelease with the jar attached. Pushes to `main` are built and uploaded as a run artifact by `build.yml`.
 - A local `build/streamline-reference/` copy of the Streamline repo docs may exist for reference. `build/` is gitignored, so it is never committed; treat it as read-only.
