@@ -1,126 +1,133 @@
 # MC Reflex Tools
 
-Minecraft Java Edition `26.2` client mod scaffold for **official NVIDIA SDK integration only**.
+NVIDIA Reflex Low Latency in Minecraft Java Edition 26.2, driven through Minecraft's native
+Vulkan renderer and the official NVIDIA Streamline SDK.
 
-## Scope
+> **Not affiliated with NVIDIA, Mojang, Microsoft, or FabricMC.** This repository contains no
+> NVIDIA SDK code and no Minecraft code. You supply the Streamline SDK yourself — see
+> [NOTICE.md](NOTICE.md).
 
-- Minecraft Java Edition `26.2` only.
-- Fabric client artifact.
-- Windows x64 and Minecraft's native Vulkan renderer.
-- NVIDIA Streamline integration for Reflex first, then DLSS Super Resolution.
-- No legacy Minecraft support.
-- No OpenGL path.
-- No custom AntiLag, frame scheduler, GPU-timing estimator, shader upscaler, or non-NVIDIA fallback.
+## Status
 
-## Current state: M2 — Reflex Low Latency verified
+Early, and honest about it. One feature works and is verified against NVIDIA's own tooling;
+the rest is blocked.
 
-The Fabric client resolves and verifies Minecraft's Vulkan context, loads the official
-NVIDIA Streamline SDK, and drives Reflex Low Latency through it. Reflex is verified
-end-to-end against NVIDIA's own Reflex Test Utility — `PC Latency` moves from `0.000`
-to `8.3–22.3 ms` depending on the scene, with a non-zero input-to-simulation component.
-
-DLSS Super Resolution and DLSS-G are **not** functional yet. They are blocked on an NGX
-context (see below) and on resource tagging that is not implemented.
-
-The full record — evidence, measurement precision, disproven conclusions, and open
-issues — is in [`docs/reflex-verification.md`](docs/reflex-verification.md). Read it
-before re-investigating Reflex behavior.
-
-A feature becomes eligible only when all of these conditions hold:
-
-1. Minecraft `26.2` runs with its native Vulkan renderer.
-2. The Mod can safely access Minecraft's active `VkInstance`, `VkPhysicalDevice`, `VkDevice`, graphics `VkQueue`, queue-family index, and `VkSwapchainKHR`.
-3. The handles are verified to belong to Minecraft's actual submit/present path.
-4. An NVIDIA-approved Streamline SDK package and redistribution plan are available.
-5. The NVIDIA runtime initializes successfully on a supported GPU and driver.
-
-Anything else remains unavailable. The Mod must never create a second Vulkan device, queue, swapchain, or Present loop.
-
-Known blockers outside the Mod:
-
-- `dlssGMode` must stay `OFF` in `config/mc_reflex_tools.json`. Frame Generation cannot
-  run without an NGX context, and enabling it makes the Reflex Test Utility's Frame Gen
-  cycles fail.
-- The NVIDIA Reflex HUD does not composite over the game window. It is drawn by the
-  driver and is not affected by anything in this repository.
-- `VK_NV_low_latency2` is deliberately **not** enabled on Minecraft's device. The fix
-  exists (`VulkanBackendDeviceExtensionsMixin`) but enabling it makes Reflex strictly
-  worse, so it is gated behind `-Dmc_reflex_tools.vulkanLowLatency2=true` and off by
-  default. See [`docs/reflex-verification.md`](docs/reflex-verification.md) §7.3.
-
-## Modules
-
-| Module | Responsibility |
+| Feature | State |
 | --- | --- |
-| `common-api` | Feature status, Vulkan context contract, and lifecycle interfaces. |
-| `vulkan-context` | Version-independent contract for Minecraft-owned Vulkan context discovery. |
-| `nvidia-sdk-java` | JNI boundary and non-emulating unavailable provider. |
-| `nvidia-sdk-native` | CMake native bridge. NVIDIA SDK binaries are not vendored. |
-| `fabric` | Fabric 26.2 client artifact and sole active loader target. |
+| Reflex Low Latency | **Working.** Verified end-to-end against the NVIDIA Reflex Test Utility |
+| Reflex frame limiting | Working — `customFrameLimitFps` is applied through Reflex |
+| DLSS Super Resolution | **Not functional.** No NGX context, and no resource tagging |
+| DLSS-G Frame Generation | **Not functional.** Same blocker; keep it `OFF` |
 
-## Planned delivery
+`PC Latency` in the Reflex Test Utility moves from `0.000` (no integration) to
+`21.5–23.1 ms` at 280 FPS, with a non-zero input-to-simulation component. The full record —
+evidence, how far each measurement can be trusted, and the conclusions that were tried and
+disproven — is in [docs/reflex-verification.md](docs/reflex-verification.md). Read that before
+re-investigating any Reflex behaviour.
 
-### M0 — scaffold and safety gate
+## Requirements
 
-- [x] Private GitHub repository with `main` as the default branch.
-- [x] Minecraft `26.2` Fabric Gradle module.
-- [x] Java API and Windows x64 JNI boundary.
-- [x] No self-written AntiLag or Super Resolution fallback.
-- [x] Build verification with JDK 25 and Gradle wrapper.
-- [x] Read-only Fabric 26.2 Vulkan context probe validated against Minecraft-owned device, queue, and swapchain.
-- [x] Validate windowed, borderless-fullscreen, and exclusive-fullscreen Vulkan presentation modes.
+- Windows x64
+- An NVIDIA GPU and driver that support Reflex
+- Minecraft Java Edition **26.2**, running its **Vulkan** renderer
+- The **NVIDIA Streamline SDK v2.14.1** — not included, obtain it from NVIDIA
+- To build: JDK 25. To rebuild the native bridge: CMake and an MSVC C++20 toolchain
 
-### M1 — Vulkan context verification
+Minecraft 26.2 defaults to OpenGL. Set this in `options.txt` in your game directory, or the
+mod reports `UNSUPPORTED_RENDERER` and every feature stays unavailable:
 
-- [x] Map the exact Minecraft 26.2 Vulkan renderer classes and lifecycle.
-- [x] Implement a read-only resolver for the Minecraft-owned Vulkan handles.
-- [x] Add strict validation, version fingerprinting, and disabled-by-default diagnostics.
-- [x] Verify initial creation in windowed, borderless-fullscreen, and exclusive-fullscreen presentation modes.
-- [x] Verify runtime windowed ↔ borderless fullscreen ↔ windowed transitions and refresh the borrowed swapchain handle.
-- [x] Trace the actual simulation, Vulkan submit, and Present boundaries without changing their behavior.
-- [ ] Verify runtime exclusive-fullscreen transition through Minecraft's public settings screen, world switch, and shutdown.
+```
+preferredGraphicsBackend:"vulkan"
+```
 
-### M2 — official NVIDIA Reflex
+## Getting the Streamline SDK
 
-- [x] Integrate an approved NVIDIA Streamline SDK distribution through `nvidia-sdk-native`.
-- [x] Align the Java marker contract with Streamline 2.14.1 PCL markers and add a native SDK-readiness probe.
-- [x] Initialize against Minecraft's existing Vulkan device and graphics queue.
-- [x] Map actual input, simulation, queue-submit, and present boundaries to official Reflex markers.
-- [x] Call only NVIDIA SDK sleep/marker functions; implement no custom timing algorithm.
-- [x] Validate marker order and failure handling on supported NVIDIA hardware.
-- [x] Answer the driver's out-of-band latency ping from the window procedure.
-- [x] Verify end-to-end against NVIDIA's Reflex Test Utility (`PC Latency` non-zero, `I>S` measured).
-- [ ] Trace why `VK_NV_low_latency_2` did not initialize on Minecraft's device.
+Download the Streamline SDK from NVIDIA, extract it, and point `NVIDIA_STREAMLINE_ROOT` at the
+extracted root:
 
-### M3 — DLSS Super Resolution
+```bash
+export NVIDIA_STREAMLINE_ROOT='<path-to-streamline-sdk-v2.14.1>'
+```
 
-- [ ] Provide a valid `applicationId` to `slInit` so `sl.common` creates an NGX context.
-- [ ] Establish Minecraft-native color, depth, motion-vector, jitter, exposure, and history-reset paths.
-- [ ] Tag Vulkan resources and command buffers for Streamline.
-- [ ] Run official DLSS Super Resolution only after M2 is stable.
-- [ ] Keep HUD and GUI outside the DLSS input path.
-
-### M4 — Frame Generation evaluation
-
-- [ ] Evaluate only after Reflex and DLSS SR are stable under resizing, world changes, recording, and compatibility tests.
-- [ ] Remain experimental and disabled by default.
-
-## Build prerequisites
-
-- JDK 25 for Minecraft 26.2.
-- CMake and a C++20 Windows toolchain for `nvidia-sdk-native`.
+The build reads it for headers and `sl.interposer.lib`; at runtime the Streamline plugin DLLs
+must be reachable under `<root>/bin/x64`. Nothing machine-specific is baked into the jar — if
+the variable is unset at runtime, the Mod reports itself unavailable and the game runs
+unchanged.
 
 ## Build
 
 ```bash
-./gradlew build
-cmake -S nvidia-sdk-native -B nvidia-sdk-native/build
-cmake --build nvidia-sdk-native/build --config Release
+./gradlew :fabric:build
 ```
 
-## Non-goals
+The jar lands in `fabric/build/libs/`. It embeds a prebuilt native bridge, so this works
+without a C++ toolchain. To rebuild that bridge from source — required after editing
+`nvidia-sdk-native/src/jni_exports.cpp` — see [docs/native-build.md](docs/native-build.md).
 
-- Minecraft 1.8.9, 1.12.2, or any legacy version.
-- OpenGL integration.
-- G-SYNC enablement; this is driver/display controlled.
-- DLSS/Reflex behavior emulation or general-GPU substitutes.
+## Run the development client
+
+```bash
+export NVIDIA_STREAMLINE_ROOT='<path-to-streamline-sdk-v2.14.1>'
+./gradlew :fabric:runClient
+```
+
+Configuration lives in `config/mc_reflex_tools.json`, generated on first run:
+
+```json
+{
+  "reflexMode": "ON_PLUS_BOOST",
+  "customFrameLimitFps": 0,
+  "dlssMode": "MAX_QUALITY",
+  "dlssGMode": "OFF"
+}
+```
+
+`customFrameLimitFps = 0` disables the limit. **Keep `dlssGMode` at `OFF`** until the NGX
+context exists — enabling it makes the Reflex Test Utility's Frame Gen cycles fail.
+
+## How it works
+
+Minecraft 26.2 renders through the `GpuDevice` / `GpuSurface` abstraction over
+`VulkanDevice` / `VulkanGpuSurface`. The Mod borrows Minecraft's own `VkInstance`, `VkDevice`,
+graphics queue and swapchain through Mixin accessors and hands them to Streamline. It never
+creates a second device, queue, swapchain, or Present loop.
+
+Reflex sleep runs at `RenderSystem.pollEvents()` HEAD — after the previous frame's present and
+before input sampling — and the six PCL markers are emitted at the simulation, queue-submit, and
+present boundaries. The driver's out-of-band latency ping is answered by subclassing the game
+window's procedure, because Minecraft leaves it to GLFW.
+
+The design decisions are recorded in [docs/architecture.md](docs/architecture.md), and
+[docs/reflex-verification.md](docs/reflex-verification.md) covers what is and is not verified.
+
+## Known blockers
+
+- **DLSS needs an NGX context.** `slInit` is called without an `applicationId`, so `sl.common`
+  creates none, and every `kFeatureDLSS` / `kFeatureDLSS_G` call returns "context is missing".
+  Resource tagging, `slSetConstants`, and `slEvaluateFeature` are also not implemented, so even
+  with a context DLSS would not affect the rendered image.
+- **The NVIDIA Reflex HUD does not composite over the Minecraft window.** That overlay is drawn
+  by the driver, not by Streamline and not by this Mod; nothing in this repository affects it.
+- **`VK_NV_low_latency_2` is deliberately not enabled.** The documented manual-hooking fix works,
+  but it measurably regresses Reflex, so it is gated behind
+  `-Dmc_reflex_tools.vulkanLowLatency2=true` and off by default. The cause of the regression is
+  not known. See [docs/reflex-verification.md](docs/reflex-verification.md) §7.3.
+
+## Roadmap
+
+- **M0–M1** — scaffold, safety gate, and Minecraft-owned Vulkan context discovery and validation. Complete.
+- **M2** — official NVIDIA Reflex, verified end-to-end. Complete.
+- **M3** — DLSS Super Resolution, once an NGX context and resource tagging exist.
+- **M4** — Frame Generation evaluation, only after Reflex and DLSS are stable.
+
+The itemised checklist is in [docs/roadmap.md](docs/roadmap.md).
+
+## Legal
+
+NVIDIA, Reflex, DLSS, G-SYNC and Streamline are trademarks of NVIDIA Corporation. Minecraft is
+a trademark of Mojang Synergies AB. This project is not affiliated with, endorsed by, or
+sponsored by NVIDIA, Mojang, Microsoft, or FabricMC. See [NOTICE.md](NOTICE.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE). That covers this repository's source code only.

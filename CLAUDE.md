@@ -150,4 +150,6 @@ DLSS still only initializes, and not even that: `slInit` is called without an `a
 - Commit messages use conventional prefixes (`feat:`, `chore:`, `test:`).
 - Architecture decisions are recorded in `docs/architecture.md` (AD-001 onward). Update them when the design shifts.
 - All NVIDIA-feature integration is additive behind graceful "unavailable" fallback: on any failure, the game keeps running unchanged.
-- `git status` currently tracks a `build/streamline-reference/` copy of the Streamline repo docs; treat it as read-only reference material, not project code.
+- **Never commit NVIDIA SDK files.** No Streamline headers, import libraries, or plugin DLLs. `NOTICE.md` explains why and the `redistribution-guard` CI job enforces it. The one permitted binary is our own `mc_reflex_tools_native.dll`, built from this repository's source.
+- Editing `nvidia-sdk-native/src/jni_exports.cpp` means rebuilding and recommitting that DLL, or the `native-dll-freshness` CI job fails. The toolchain is recorded in `docs/native-build.md`.
+- A local `build/streamline-reference/` copy of the Streamline repo docs may exist for reference. `build/` is gitignored, so it is never committed; treat it as read-only.
