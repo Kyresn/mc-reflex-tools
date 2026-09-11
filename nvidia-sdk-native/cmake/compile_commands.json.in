@@ -1,0 +1,12 @@
+[
+  {
+    "directory": "@CLANGD_DIRECTORY@",
+    "arguments": [
+    "clang",
+    @CLANGD_ARGUMENTS@,
+    "-c",
+    "@CLANGD_SOURCE@"
+    ],
+    "file": "@CLANGD_SOURCE@"
+  }
+]

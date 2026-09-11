@@ -1,0 +1,5 @@
+# clangd cannot find the compile database by walking up from
+# nvidia-sdk-native/src/jni_exports.cpp, because CMake writes it to a sibling
+# build directory rather than a parent. Point at it explicitly.
+CompileFlags:
+  CompilationDatabase: nvidia-sdk-native/build
