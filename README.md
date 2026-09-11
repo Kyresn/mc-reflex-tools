@@ -12,9 +12,19 @@ Minecraft Java Edition `26.2` client mod scaffold for **official NVIDIA SDK inte
 - No OpenGL path.
 - No custom AntiLag, frame scheduler, GPU-timing estimator, shader upscaler, or non-NVIDIA fallback.
 
-## Current state: M1 — verified Vulkan integration boundary
+## Current state: M2 — Reflex Low Latency verified
 
-The Fabric client now resolves and traces Minecraft's Vulkan context, active swapchain, and actual simulation/submit/present boundaries. It intentionally does **not** load Streamline, call Reflex, or emulate any NVIDIA feature.
+The Fabric client resolves and verifies Minecraft's Vulkan context, loads the official
+NVIDIA Streamline SDK, and drives Reflex Low Latency through it. Reflex is verified
+end-to-end against NVIDIA's own Reflex Test Utility — `PC Latency` moves from `0.000`
+to `8.3–22.3 ms` depending on the scene, with a non-zero input-to-simulation component.
+
+DLSS Super Resolution and DLSS-G are **not** functional yet. They are blocked on an NGX
+context (see below) and on resource tagging that is not implemented.
+
+The full record — evidence, measurement precision, disproven conclusions, and open
+issues — is in [`docs/reflex-verification.md`](docs/reflex-verification.md). Read it
+before re-investigating Reflex behavior.
 
 A feature becomes eligible only when all of these conditions hold:
 
@@ -25,6 +35,18 @@ A feature becomes eligible only when all of these conditions hold:
 5. The NVIDIA runtime initializes successfully on a supported GPU and driver.
 
 Anything else remains unavailable. The Mod must never create a second Vulkan device, queue, swapchain, or Present loop.
+
+Known blockers outside the Mod:
+
+- `dlssGMode` must stay `OFF` in `config/mc_reflex_tools.json`. Frame Generation cannot
+  run without an NGX context, and enabling it makes the Reflex Test Utility's Frame Gen
+  cycles fail.
+- The NVIDIA Reflex HUD does not composite over the game window. It is drawn by the
+  driver and is not affected by anything in this repository.
+- `VK_NV_low_latency2` is deliberately **not** enabled on Minecraft's device. The fix
+  exists (`VulkanBackendDeviceExtensionsMixin`) but enabling it makes Reflex strictly
+  worse, so it is gated behind `-Dmc_reflex_tools.vulkanLowLatency2=true` and off by
+  default. See [`docs/reflex-verification.md`](docs/reflex-verification.md) §7.3.
 
 ## Modules
 
@@ -60,15 +82,19 @@ Anything else remains unavailable. The Mod must never create a second Vulkan dev
 
 ### M2 — official NVIDIA Reflex
 
-- [ ] Integrate an approved NVIDIA Streamline SDK distribution through `nvidia-sdk-native`.
+- [x] Integrate an approved NVIDIA Streamline SDK distribution through `nvidia-sdk-native`.
 - [x] Align the Java marker contract with Streamline 2.14.1 PCL markers and add a native SDK-readiness probe.
-- [ ] Initialize against Minecraft's existing Vulkan device and graphics queue.
-- [ ] Map actual input, simulation, queue-submit, and present boundaries to official Reflex markers.
-- [ ] Call only NVIDIA SDK sleep/marker functions; implement no custom timing algorithm.
-- [ ] Validate marker order and failure handling on supported NVIDIA hardware.
+- [x] Initialize against Minecraft's existing Vulkan device and graphics queue.
+- [x] Map actual input, simulation, queue-submit, and present boundaries to official Reflex markers.
+- [x] Call only NVIDIA SDK sleep/marker functions; implement no custom timing algorithm.
+- [x] Validate marker order and failure handling on supported NVIDIA hardware.
+- [x] Answer the driver's out-of-band latency ping from the window procedure.
+- [x] Verify end-to-end against NVIDIA's Reflex Test Utility (`PC Latency` non-zero, `I>S` measured).
+- [ ] Trace why `VK_NV_low_latency_2` did not initialize on Minecraft's device.
 
 ### M3 — DLSS Super Resolution
 
+- [ ] Provide a valid `applicationId` to `slInit` so `sl.common` creates an NGX context.
 - [ ] Establish Minecraft-native color, depth, motion-vector, jitter, exposure, and history-reset paths.
 - [ ] Tag Vulkan resources and command buffers for Streamline.
 - [ ] Run official DLSS Super Resolution only after M2 is stable.

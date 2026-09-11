@@ -79,3 +79,51 @@ PresentEnd
 ```
 
 The M2 readiness bridge reports whether a native DLL loaded and whether official Streamline headers were present at native build time. It deliberately does not call `slInit`, `slSetVulkanInfo`, `slReflexSleep`, or `slPCLSetMarker`. This avoids claiming SDK support before the correct device-creation proxy and runtime distribution plan are implemented.
+
+## AD-012: Reflex sleep belongs at the input-sampling boundary
+
+`slReflexSleep` must run after the previous frame's present and before input sampling. In 26.2 that boundary is `RenderSystem.pollEvents()` HEAD, which wraps `GLFW.glfwPollEvents()`. `RenderSystemPollEventsMixin` owns this call, and it is also where the per-frame Streamline `FrameToken` is acquired, so every marker for that frame shares one token.
+
+Calling sleep at the simulation boundary instead is not merely suboptimal — it places the wait after the input the driver is trying to throttle against, and the driver-side measurement reports `I>S = 0.00` rather than a degraded value.
+
+## AD-013: SimulationEnd anchors at the `renderFrame` call site
+
+`present()` runs inside `renderFrame()`, which runs inside `runTick()`. Hooking `runTick`'s RETURN therefore emits `SimulationEnd` after `PresentEnd` on every frame. `MinecraftSimulationLifecycleMixin` anchors `SimulationEnd` at the `renderFrame` INVOKE site so the marker order is `SimulationStart → SimulationEnd → RenderSubmit* → Present*`.
+
+An IDE warning that the `@At` target cannot be mapped is a false alarm here; the mixin applies correctly at runtime and `orderViolations` is the authority.
+
+## AD-014: The Streamline interposer is in Minecraft's Vulkan path
+
+Minecraft creates its own `VkDevice`, so Streamline's `vkCreateDevice` proxy never sees it and `slSetVulkanInfo` is what binds the device. That does **not** mean Minecraft's Vulkan calls bypass `sl.interposer.dll`: the interposer installs inline hooks on the loader's entry points, and the Reflex plugin's swapchain hooks are listed as `- OK` in `sl.log`.
+
+The `interposer 'no'` field on the plugin load lines means the plugin does not *require* interposer-only features. It is not evidence that hooks are absent.
+
+Consequence: the Reflex plugin only learns about the swapchain through `slHookVkCreateSwapchainKHRBefore` → `notifyCreateSwapchain`, and `vknvll2.cpp` returns an empty report when no swapchain is known. A populated `ReflexReport` is therefore proof that the hook fires.
+
+## AD-015: Driver-side overlays are out of scope
+
+The NVIDIA Reflex HUD is drawn by the driver, not by Streamline and not by this Mod. `ReflexTestEnable.exe` enables it through NVAPI DRS and `NvAPI_Reflex_FlashIndicatorSet`, with no Streamline involvement. Whether it composites over a given window is therefore not a function of anything in this repository, and the Mod must not attempt to influence it.
+
+Because that overlay is also observed to render in its unbound state — `FrameID = 4294967295`, `App_Called_Sleep = 0`, all timestamps zero — it is not a dependable readout even when it is visible. Any in-game latency display this project needs should be rendered from `ReflexLatencyReport` and the native counters, which are populated from data we verify.
+
+## AD-016: M2 evidence is recorded in `docs/reflex-verification.md`
+
+AD-011 describes the pre-M2 state and is superseded on its last point: `slInit`, `slSetVulkanInfo`, `slReflexSleep`, and `slPCLSetMarker` are now called, and Reflex Low Latency is verified end-to-end against NVIDIA's own Reflex Test Utility.
+
+`docs/reflex-verification.md` is the living record: verified/unverified status, the four defects that were fixed and the evidence for each, the precision and failure signatures of every measurement, the conclusions that were tried and disproven, and the open issues. Update it rather than re-deriving the analysis.
+
+## AD-017: Do not inject Streamline's device extensions into Minecraft's device
+
+Minecraft creates its own `VkInstance` and `VkDevice`, so it never passes through the interposer's `vkCreateInstance`/`vkCreateDevice` proxies and the extensions Streamline's features request are never added. `ProgrammingGuideManualHooking.md` makes the host responsible for them and mandates `slGetFeatureRequirements` before device creation.
+
+That fix is implemented in `VulkanBackendDeviceExtensionsMixin` and it does what it says: with it, `VK_NV_low_latency2` is enabled, `CreateVkNvLowLatency2` succeeds and the LL2 backend initializes. The project still does not use it by default, because it measurably makes Reflex worse — the driver stops publishing `ReflexReport` frames and stops sending its latency ping, so PC latency measurement is lost where it previously worked.
+
+An earlier hypothesis blamed the LL2 backend having no swapchain (it learns one only through the interposer's swapchain hooks, which are installed after Minecraft has already created its device and swapchain). Recreating the swapchain five times mid-run did not recover it, so that hypothesis is wrong and recorded as such.
+
+The switch is `-Dmc_reflex_tools.vulkanLowLatency2=true`, off by default. Re-enabling it requires a way to observe `vkSetLatencySleepModeNV`'s `VkResult` and the driver's view of the swapchain. The verified-working configuration is the one where the extension is absent and Streamline takes its fallback path.
+
+## AD-018: Re-apply Reflex options after every swapchain change
+
+`slReflexSetOptions` is re-sent whenever the desired mode or frame limit changes **and** whenever Minecraft replaces its swapchain. Streamline's LL2 backend only forwards latency mode to the driver through the swapchain handle it last saw created, and `setSleepMode` silently returns `eOk` while it has none, so an options call must follow a swapchain (re)creation for the driver to be engaged at all.
+
+This did not fix the regression AD-017 describes, but it is correct on its own terms and it also logs the reason, which makes the two triggers distinguishable in the field.

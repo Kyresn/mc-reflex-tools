@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -164,6 +165,23 @@ const sl::Feature g_featuresToLoad[] = {
 constexpr uint32_t g_numFeaturesToLoad =
     static_cast<uint32_t>(sizeof(g_featuresToLoad) / sizeof(g_featuresToLoad[0]));
 
+// Features whose Vulkan device requirements the host application has to satisfy
+// itself. Streamline adds these when the host creates its device through the
+// sl.interposer proxies; Minecraft creates its own VkDevice directly, so the host
+// is responsible for them. See the SDK's ProgrammingGuideManualHooking.md,
+// "Instance and device additions".
+//
+// DLSS and DLSS-G are deliberately excluded: their requirements also include extra
+// optical-flow queues, which cannot be added to a device Minecraft has already
+// created and sized.
+const sl::Feature g_featuresRequiringDeviceExtensions[] = {
+    sl::kFeatureReflex,
+    sl::kFeaturePCL,
+};
+constexpr uint32_t g_numFeaturesRequiringDeviceExtensions =
+    static_cast<uint32_t>(sizeof(g_featuresRequiringDeviceExtensions) /
+                          sizeof(g_featuresRequiringDeviceExtensions[0]));
+
 // Plugin DLL search path (the Streamline SDK bin/x64 directory), populated from
 // the NVIDIA_STREAMLINE_ROOT environment variable.
 std::wstring g_pluginPath;
@@ -315,6 +333,67 @@ Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeInitSdk(JNIEnv*, jcla
     return initStreamlineSdk() ? kSuccess : kUnavailable;
 #else
     return kUnavailable;
+#endif
+}
+
+// Vulkan device extensions the loaded Streamline features need on the host device.
+//
+// Minecraft creates its own VkDevice through the loader rather than through
+// Streamline's vkCreateDevice proxy, so the extensions Streamline would normally
+// inject are never added. Without VK_NV_low_latency2 the LL2 backend fails with
+// eNoImplementation (vkLatencySleepNV resolves to null), the swapchain is created
+// without VkSwapchainLatencyCreateInfoNV, and Reflex silently degrades.
+//
+// Queried before Minecraft calls vkCreateDevice; see VulkanBackendDeviceExtensionsMixin.
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_dev_kyresn_mcreflex_nvidia_NativeReflexProvider_nativeGetRequiredDeviceExtensions(JNIEnv* env, jclass) {
+#ifdef MC_REFLEX_TOOLS_HAS_STREAMLINE
+    if (!initStreamlineSdk()) {
+        return nullptr;
+    }
+
+    std::vector<std::string> names;
+    for (uint32_t i = 0; i < g_numFeaturesRequiringDeviceExtensions; ++i) {
+        sl::FeatureRequirements requirements{};
+        if (slGetFeatureRequirements(g_featuresRequiringDeviceExtensions[i], requirements) != sl::Result::eOk) {
+            // Feature is not loaded or not present on this adapter; its
+            // requirements simply contribute nothing.
+            continue;
+        }
+        for (uint32_t e = 0; e < requirements.vkNumDeviceExtensions; ++e) {
+            const char* name = requirements.vkDeviceExtensions[e];
+            if (name == nullptr) {
+                continue;
+            }
+            if (std::find(names.begin(), names.end(), name) == names.end()) {
+                names.emplace_back(name);
+            }
+        }
+    }
+
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (stringClass == nullptr) {
+        return nullptr;
+    }
+    jobjectArray result = env->NewObjectArray(static_cast<jsize>(names.size()), stringClass, nullptr);
+    if (result == nullptr) {
+        env->DeleteLocalRef(stringClass);
+        return nullptr;
+    }
+    for (size_t i = 0; i < names.size(); ++i) {
+        jstring name = env->NewStringUTF(names[i].c_str());
+        if (name == nullptr) {
+            env->DeleteLocalRef(result);
+            env->DeleteLocalRef(stringClass);
+            return nullptr;
+        }
+        env->SetObjectArrayElement(result, static_cast<jsize>(i), name);
+        env->DeleteLocalRef(name);
+    }
+    env->DeleteLocalRef(stringClass);
+    return result;
+#else
+    return nullptr;
 #endif
 }
 

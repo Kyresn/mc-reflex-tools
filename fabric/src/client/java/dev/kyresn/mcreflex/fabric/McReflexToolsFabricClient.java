@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public final class McReflexToolsFabricClient implements ClientModInitializer {
     public static final String MOD_ID = "mc_reflex_tools";
-    static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
     private static volatile ReflexProvider activeReflexProvider = new UnavailableReflexProvider(NvidiaFeatureStatus.MISSING_VULKAN_CONTEXT);
     private static volatile DlssProvider activeDlssProvider = new UnavailableDlssProvider(NvidiaFeatureStatus.MISSING_VULKAN_CONTEXT);
@@ -125,28 +125,37 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
                 }
             }
 
-            // Reflex options are re-applied whenever the desired configuration
-            // changes, not only when the window changes. The SDK requires
-            // slReflexSetOptions to be called at least once even when Reflex is
-            // off, and again after every runtime option change.
+            Optional<FabricPresentationSnapshot> captured = FabricPresentationSnapshot.capture(result);
+            FabricPresentationSnapshot presentation = captured.orElse(null);
+            FabricPresentationSnapshot previous = lastPresentation.getAndSet(presentation);
+            boolean presentationChanged = presentation != null && !presentation.equals(previous);
+
+            // Reflex options are applied whenever the desired configuration changes, and
+            // again after every swapchain (re)creation. Streamline's LL2 backend only
+            // forwards latency mode to the driver through the swapchain handle it last saw
+            // created, and silently no-ops while it has none, so the driver stays unengaged
+            // until an options call follows a swapchain creation. Minecraft's first
+            // swapchain is created before the SDK's swapchain hooks are installed, which is
+            // exactly that case. The SDK also requires slReflexSetOptions to be called at
+            // least once even when Reflex is off, and again after a runtime option change.
             if (activeReflexProvider instanceof NativeReflexProvider) {
                 ModConfig config = ModConfig.get();
                 int targetLimitFps = config.customFrameLimitFps;
                 String desiredOptions = config.reflexMode + "@" + targetLimitFps;
-                if (!desiredOptions.equals(lastAppliedReflexOptions.getAndSet(desiredOptions))) {
+                boolean optionsChanged = !desiredOptions.equals(lastAppliedReflexOptions.get());
+                if (optionsChanged || presentationChanged) {
+                    lastAppliedReflexOptions.set(desiredOptions);
                     activeReflexProvider.setOptions(config.reflexMode, targetLimitFps);
-                    LOGGER.info("Applied Reflex options: mode={}, frameLimitFps={}", config.reflexMode, targetLimitFps);
+                    LOGGER.info(
+                            "Applied Reflex options: mode={}, frameLimitFps={}, swapchain=0x{}, reason={}",
+                            config.reflexMode,
+                            targetLimitFps,
+                            presentation == null ? "none" : Long.toUnsignedString(presentation.swapchain(), 16),
+                            optionsChanged ? "options" : "swapchain");
                 }
             }
 
-            Optional<FabricPresentationSnapshot> captured = FabricPresentationSnapshot.capture(result);
-            if (captured.isEmpty()) {
-                return;
-            }
-
-            FabricPresentationSnapshot presentation = captured.get();
-            FabricPresentationSnapshot previous = lastPresentation.getAndSet(presentation);
-            if (presentation.equals(previous)) {
+            if (!presentationChanged) {
                 return;
             }
 

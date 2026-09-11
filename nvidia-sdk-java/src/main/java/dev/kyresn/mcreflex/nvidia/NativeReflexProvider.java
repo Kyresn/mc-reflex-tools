@@ -8,6 +8,8 @@ import dev.kyresn.mcreflex.api.ReflexMode;
 import dev.kyresn.mcreflex.api.ReflexProvider;
 import dev.kyresn.mcreflex.api.ReflexState;
 
+import java.util.List;
+
 /** JNI boundary for the official NVIDIA implementation. */
 public final class NativeReflexProvider implements ReflexProvider {
     private boolean initialized;
@@ -170,7 +172,50 @@ public final class NativeReflexProvider implements ReflexProvider {
         }
     }
 
+    /**
+     * Opt-in switch for injecting Streamline's Vulkan device extensions into Minecraft's device.
+     * Off by default - see {@link #requiredDeviceExtensions()}.
+     */
+    public static final String ENABLE_VULKAN_LL2_PROPERTY = "mc_reflex_tools.vulkanLowLatency2";
+
+    /**
+     * Vulkan device extensions the loaded Streamline features require on the host device,
+     * as reported by {@code slGetFeatureRequirements}.
+     *
+     * <p>Streamline enables these itself when an application creates its device through the
+     * {@code sl.interposer} proxies. Minecraft creates its own {@code VkDevice} directly, so
+     * the host is responsible for them - see the SDK's {@code ProgrammingGuideManualHooking.md},
+     * "Instance and device additions". Without {@code VK_NV_low_latency2} the Reflex LL2
+     * backend fails to initialize with {@code eNoImplementation} and the plugin falls back to
+     * its NvAPI path.
+     *
+     * <p><b>Opt-in, and it is not an improvement.</b> Measured on the reference system,
+     * injecting the extensions makes Reflex strictly worse: the LL2 backend initializes, but
+     * the driver then stops publishing frame reports and stops sending its latency ping
+     * ({@code pclPings} 250/session to 0), so PC latency measurement is lost. Recreating the
+     * swapchain mid-run does not recover it. The cause is a startup race - Streamline installs
+     * its Vulkan swapchain hooks asynchronously about three seconds after {@code slInit}
+     * returns, by which time Minecraft has already created its device and its only swapchain,
+     * so the LL2 backend never sees a swapchain it can drive. The NvAPI fallback that runs
+     * when the extension is absent does not depend on that handle and works end to end.
+     *
+     * <p>Set {@code -Dmc_reflex_tools.vulkanLowLatency2=true} to opt in and re-measure. Must be
+     * resolved before Minecraft calls {@code vkCreateDevice}; returns an empty list when the
+     * native runtime is unavailable, so a missing SDK degrades to vanilla device creation.
+     */
+    public static List<String> requiredDeviceExtensions() {
+        if (!Boolean.getBoolean(ENABLE_VULKAN_LL2_PROPERTY)) {
+            return List.of();
+        }
+        if (!NativeLibraryLoader.tryLoad()) {
+            return List.of();
+        }
+        String[] names = nativeGetRequiredDeviceExtensions();
+        return names == null || names.length == 0 ? List.of() : List.of(names);
+    }
+
     private static native int nativeInitSdk();
+    private static native String[] nativeGetRequiredDeviceExtensions();
     private static native int nativeInitialize(long instance, long physicalDevice, long device,
                                                 long graphicsQueue, int queueFamilyIndex, long swapchain);
     private static native void nativeSetReflexOptions(int mode, int frameLimitFps);
