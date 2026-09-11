@@ -1,6 +1,7 @@
 package dev.kyresn.mcreflex.fabric;
 
 import dev.kyresn.mcreflex.api.ReflexLatencyReport;
+import dev.kyresn.mcreflex.fabric.config.ModConfig;
 import dev.kyresn.mcreflex.nvidia.NativeReflexProvider;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -11,8 +12,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * the Reflex/PCL integration behaves as the SDK contract requires.
  */
 public final class VulkanLifecycleTrace {
-    /** Frames between diagnostic dumps. */
+    /** Frames between diagnostic dumps; tightened when debug mode is on. */
     private static final long REPORT_INTERVAL_FRAMES = 300;
+    private static final long DEBUG_REPORT_INTERVAL_FRAMES = 30;
 
     private static final AtomicLong frame = new AtomicLong();
     private static final AtomicLong submitCount = new AtomicLong();
@@ -34,8 +36,9 @@ public final class VulkanLifecycleTrace {
     }
 
     public static void onPresentEnd() {
+        long interval = ModConfig.get().debug ? DEBUG_REPORT_INTERVAL_FRAMES : REPORT_INTERVAL_FRAMES;
         long currentFrame = frame.get();
-        if (currentFrame == 0 || currentFrame % REPORT_INTERVAL_FRAMES != 0) {
+        if (currentFrame == 0 || currentFrame % interval != 0) {
             return;
         }
 

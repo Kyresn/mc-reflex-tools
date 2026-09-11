@@ -19,6 +19,7 @@ window, and that is not caused by anything in this repository.
 | `slReflexSleep` placement | PASS | `sleeps == frame - 2` |
 | Driver-side latency measurement | PASS | Reflex Test Utility: `I>S` 0.00 → 0.68–1.86 ms |
 | In-application latency report | PASS | `ReflexReport.frameId` advances 1:1 |
+| Runtime mode / frame-limit toggle | PASS | `/reflex mode|framelimit` re-applies options the same tick — see §4.4 |
 | Reflex HUD over the game window | **FAIL** | see §7.1 |
 | DLSS SR / DLSS-G | **BLOCKED** | missing NGX context, see §7.2 |
 | `VK_NV_low_latency_2` backend | **NOT ACTIVE** | root cause found, fix disabled on purpose — see §7.3 |
@@ -179,6 +180,44 @@ The 19:00+ runs need an **elevated** prompt: `ReflexTest.exe` and `ReflexTestEna
 both call `OpenProcessToken`/`GetTokenInformation` and print
 `Please run with elevated/admin privileges.` Without elevation the tool cannot install
 its driver profile and reports `PC Latency = 0.000` regardless of the app.
+
+### 4.4 Runtime toggling
+
+The four modes and the frame limit are changeable in-game with a client command; each
+change is re-sent to the driver on the next tick.
+
+```text
+/reflex status
+/reflex mode off|on|boost
+/reflex framelimit <fps>     # 0 disables the limiter
+/reflex debug 0|1            # lifecycle trace every 30 frames instead of 300
+```
+
+Arguments autocomplete, and a bare subcommand (`/reflex debug` with no value) prints
+`Usage: /reflex debug 0|1` instead of doing nothing.
+
+A session that exercised every path:
+
+```text
+22:33:13  Reflex frame limit set to 100 fps via /reflex command
+22:33:13  Applied Reflex options: mode=ON_PLUS_BOOST, frameLimitFps=100, swapchain=0x6457d300, reason=options
+22:33:24  Reflex frame limit set to 260 fps via /reflex command
+22:33:24  Applied Reflex options: mode=ON_PLUS_BOOST, frameLimitFps=260, swapchain=0x6457d300, reason=options
+22:33:42  Reflex mode set to ON via /reflex command
+22:33:42  Applied Reflex options: mode=ON, frameLimitFps=260, swapchain=0x6457d300, reason=options
+22:33:49  Reflex mode set to ON_PLUS_BOOST via /reflex command
+22:33:49  Applied Reflex options: mode=ON_PLUS_BOOST, frameLimitFps=260, swapchain=0x6457d300, reason=options
+22:34:31  Reflex mode set to OFF via /reflex command
+22:34:31  Applied Reflex options: mode=OFF, frameLimitFps=260, swapchain=0x6457d300, reason=options
+```
+
+`reason=options` (not `reason=swapchain`) confirms each change came from the config, and
+the same second on both lines confirms the apply happened on the next tick. `sleeps` kept
+tracking `frame` in every mode, including `OFF` — `slReflexSleep` runs regardless of mode,
+as the contract requires.
+
+The command surfaces the same counters as §4.1 and §4.2 through `/reflex status`, which is
+the in-app readout §7.1 calls for.
 
 ## 5. Measurement precision and validity
 

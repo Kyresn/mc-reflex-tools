@@ -49,6 +49,7 @@ public final class McReflexToolsFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ModConfig.load();
+        ReflexCommands.register();
 
         FabricMinecraftVulkanContextResolver resolver = new FabricMinecraftVulkanContextResolver();
         NativeReflexProvider nativeReflex = new NativeReflexProvider();

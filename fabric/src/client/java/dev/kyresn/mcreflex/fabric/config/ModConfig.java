@@ -26,6 +26,8 @@ public final class ModConfig {
     public DlssMode dlssMode = DlssMode.MAX_QUALITY;
     public DlssGMode dlssGMode = DlssGMode.OFF;
     public int dlssGFramesToGenerate = 1;
+    // Enables the frequent lifecycle trace (every 30 frames instead of 300).
+    public boolean debug = false;
 
     public static ModConfig get() {
         return INSTANCE;
