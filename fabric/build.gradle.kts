@@ -1,5 +1,8 @@
 plugins {
-    id("net.fabricmc.fabric-loom") version "1.17-SNAPSHOT"
+    // Pinned to a release rather than 1.17-SNAPSHOT: a snapshot plugin version is
+    // resolved fresh on every build, so the build stops being reproducible and the
+    // resolution becomes a supply-chain surface.
+    id("net.fabricmc.fabric-loom") version "1.17.20"
 }
 
 base {

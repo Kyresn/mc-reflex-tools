@@ -7,7 +7,9 @@ on:
     branches: [main]
 
 # Nothing here writes to the repository. Third-party actions are pinned to commit SHAs
-# because tags are mutable; see the note in release.yml.
+# because tags are mutable; see the note in release.yml. Every checkout sets
+# persist-credentials: false so the token is not left in .git/config for the build
+# scripts - and any plugin they pull in - to find.
 permissions:
   contents: read
 
@@ -17,6 +19,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
@@ -37,6 +41,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       # Without NVIDIA_STREAMLINE_ROOT this builds the readiness stub. That is the
       # point: it proves the bridge still compiles on a machine that has no SDK.
       - name: Configure CMake
@@ -56,6 +62,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Checked-in DLL matches the recorded checksum
         run: |
           set -euo pipefail
@@ -82,6 +89,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Fail if NVIDIA SDK files are tracked
         run: |
           set -euo pipefail

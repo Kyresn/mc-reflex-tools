@@ -21,6 +21,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          # The token is read-only here and this job never pushes, but the build runs
+          # Gradle plugins; do not leave a credential in .git/config for them.
+          persist-credentials: false
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
