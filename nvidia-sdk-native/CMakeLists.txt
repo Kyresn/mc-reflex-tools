@@ -18,6 +18,17 @@ add_library(mc_reflex_tools_native SHARED src/jni_exports.cpp)
 target_include_directories(mc_reflex_tools_native PRIVATE ${JNI_INCLUDE_DIRS})
 target_compile_definitions(mc_reflex_tools_native PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 
+# Deterministic output for a fixed toolchain. /Brepro drops the PE timestamp and hashes
+# the inputs instead, and /pathmap keeps this machine's checkout path out of the debug
+# directory. Together they make "same toolchain, same bytes" hold, which is what lets the
+# checked-in binary in nvidia-sdk-java be checked against a local rebuild.
+if(MSVC)
+    target_compile_options(mc_reflex_tools_native PRIVATE
+        /Brepro
+        "/pathmap:${CMAKE_SOURCE_DIR}=/mc-reflex-tools")
+    target_link_options(mc_reflex_tools_native PRIVATE /Brepro)
+endif()
+
 # Streamline is intentionally not vendored. Set NVIDIA_STREAMLINE_ROOT to an SDK
 # distribution accepted under its license before enabling the native implementation.
 if(DEFINED ENV{NVIDIA_STREAMLINE_ROOT})

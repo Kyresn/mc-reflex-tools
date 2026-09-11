@@ -23,12 +23,57 @@ jobs:
       - name: Build Fabric artifact
         run: ./gradlew :fabric:build --no-daemon
 
-  native-probe:
-    name: Native JNI bridge
+  native-bridge:
+    name: Native bridge compiles
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      # Without NVIDIA_STREAMLINE_ROOT this builds the readiness stub. That is the
+      # point: it proves the bridge still compiles on a machine that has no SDK.
       - name: Configure CMake
         run: cmake -S nvidia-sdk-native -B nvidia-sdk-native/build
       - name: Build CMake target
         run: cmake --build nvidia-sdk-native/build --config Release
+
+  native-dll-freshness:
+    name: Checked-in DLL is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # CI cannot rebuild the real DLL: it links against sl.interposer.lib and includes
+      # Streamline headers, neither of which may be redistributed onto a runner. What CI
+      # can see is whether the source moved after the binary.
+      - name: Fail if jni_exports.cpp is newer than the checked-in binary
+        run: |
+          set -euo pipefail
+          src=$(git log -1 --format=%ct -- nvidia-sdk-native/src/jni_exports.cpp)
+          dll=$(git log -1 --format=%ct -- nvidia-sdk-java/src/main/resources/natives/windows-x64/mc_reflex_tools_native.dll)
+          echo "jni_exports.cpp  last changed: $(date -u -d "@$src")"
+          echo "checked-in DLL   last changed: $(date -u -d "@$dll")"
+          if [ "$dll" -lt "$src" ]; then
+            echo "::error::jni_exports.cpp changed after the checked-in DLL was built. Rebuild it (see docs/native-build.md) and commit the result."
+            exit 1
+          fi
+          echo "The checked-in binary is at least as new as the bridge source."
+
+  redistribution-guard:
+    name: No NVIDIA SDK files committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if NVIDIA SDK files are tracked
+        run: |
+          set -euo pipefail
+          allowed='nvidia-sdk-java/src/main/resources/natives/windows-x64/mc_reflex_tools_native.dll'
+          hits=$(git ls-files \
+            | grep -Ei '(^|/)(sl[a-z0-9_.-]*\.(dll|lib|h|hpp)|nvngx[a-z0-9_.-]*\.(dll|lib)|nvapi[a-z0-9_.-]*\.(dll|lib|h))$' \
+            | grep -vx "$allowed" || true)
+          if [ -n "$hits" ]; then
+            echo "::error::The Streamline SDK and other NVIDIA SDK files are not redistributable and must not be committed:"
+            echo "$hits"
+            echo "See NOTICE.md."
+            exit 1
+          fi
+          echo "No NVIDIA SDK files are tracked."
