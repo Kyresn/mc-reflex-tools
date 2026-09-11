@@ -1,0 +1,21 @@
+# Normalise line endings so a Windows clone and a Linux/macOS clone agree.
+* text=auto
+
+# Shell scripts must keep LF endings. With core.autocrlf=true a Windows checkout
+# would otherwise write CRLF, and these fail with "bad interpreter: /usr/bin/env
+# bash^M" on Linux, macOS, and CI runners.
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows-only batch files want CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touch binaries.
+*.dll binary
+*.lib binary
+*.exe binary
+*.pdb binary
+*.jar binary
+*.png binary
+*.jpg binary
