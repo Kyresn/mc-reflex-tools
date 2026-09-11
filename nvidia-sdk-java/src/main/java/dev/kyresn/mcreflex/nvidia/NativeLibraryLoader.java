@@ -105,20 +105,25 @@ final class NativeLibraryLoader {
         return false;
     }
 
+    /**
+     * Pre-loads {@code sl.interposer.dll}, which the native bridge links against.
+     *
+     * <p>The Streamline SDK is not redistributed with this mod, so its location can only come
+     * from {@code NVIDIA_STREAMLINE_ROOT}. When that is unset there is nothing to pre-load and
+     * the bridge fails to load; the caller reports that as the load error.
+     */
     private static void preloadStreamlineDependency() {
         String streamlineRoot = System.getenv("NVIDIA_STREAMLINE_ROOT");
-        File interposerDll = null;
-        if (streamlineRoot != null && !streamlineRoot.isEmpty()) {
-            interposerDll = new File(streamlineRoot, "bin/x64/sl.interposer.dll");
+        if (streamlineRoot == null || streamlineRoot.isEmpty()) {
+            return;
         }
-        if (interposerDll == null || !interposerDll.exists()) {
-            interposerDll = new File("<path-to-streamline-sdk-v2.14.1>/bin/x64/sl.interposer.dll");
+        File interposerDll = new File(streamlineRoot, "bin/x64/sl.interposer.dll");
+        if (!interposerDll.exists()) {
+            return;
         }
-        if (interposerDll.exists()) {
-            try {
-                System.load(interposerDll.getCanonicalPath());
-            } catch (Throwable ignored) {
-            }
+        try {
+            System.load(interposerDll.getCanonicalPath());
+        } catch (Throwable ignored) {
         }
     }
 }

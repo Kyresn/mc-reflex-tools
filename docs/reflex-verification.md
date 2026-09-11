@@ -34,7 +34,7 @@ window, and that is not caused by anything in this repository.
 | Display | 1920x1080 @ 280 Hz |
 | JDK | Eclipse Adoptium 25 |
 | Streamline | `v2.14.1.98614dad6`, built Fri Aug 28 13:38:13 2026 |
-| Reflex Test Utility | `<reflex-test-utility>` |
+| Reflex Test Utility | NVIDIA's `ReflexTest.exe` / `ReflexTestEnable.exe`, run from an elevated prompt |
 
 Streamline raises the Windows timer resolution to 5017 x 100 ns (≈ 0.502 ms) at
 `commonEntry.cpp:2045`. That bounds sleep granularity; it does not truncate the

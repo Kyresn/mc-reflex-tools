@@ -228,18 +228,24 @@ bool initStreamlineSdk() {
     g_logPath = resolveLogPath();
     pref.pathToLogsAndData = g_logPath.c_str();
 
-    // Tell Streamline where its plugin DLLs (sl.reflex.dll, sl.pcl.dll, ...)
-    // live. Without this it searches next to the executable and finds nothing.
+    // Tell Streamline where its plugin DLLs (sl.reflex.dll, sl.common.dll, ...)
+    // live. The SDK is not redistributed with this mod, so the location comes
+    // from the environment. Without it we leave both fields unset, which is the
+    // SDK's documented default: search next to the executable, where a packaged
+    // distribution would put the plugins.
     const char* sdkRoot = std::getenv("NVIDIA_STREAMLINE_ROOT");
-    if (sdkRoot != nullptr) {
+    if (sdkRoot != nullptr && sdkRoot[0] != '\0') {
         g_pluginPath = std::wstring(sdkRoot, sdkRoot + std::strlen(sdkRoot));
+        g_pluginPath += L"\\bin\\x64";
     } else {
-        g_pluginPath = L"<path-to-streamline-sdk-v2.14.1>";
+        g_pluginPath.clear();
     }
-    g_pluginPath += L"\\bin\\x64";
+
     const wchar_t* pluginPaths[] = { g_pluginPath.c_str() };
-    pref.pathsToPlugins = pluginPaths;
-    pref.numPathsToPlugins = 1;
+    if (!g_pluginPath.empty()) {
+        pref.pathsToPlugins = pluginPaths;
+        pref.numPathsToPlugins = 1;
+    }
 
     sl::Result res = slInit(pref, sl::kSDKVersion);
     if (res != sl::Result::eOk) {

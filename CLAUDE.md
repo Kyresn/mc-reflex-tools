@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Minecraft Java Edition **26.2** client mod that integrates the **NVIDIA Streamline SDK** (not the standalone Reflex SDK) to provide Reflex Low Latency, DLSS Super Resolution, DLSS-G Frame Generation, and G-SYNC/VRR-aware frame limiting. Fabric is the only active loader. Windows x64 + Minecraft's native Vulkan renderer only. No legacy MC, no OpenGL path, no self-written AntiLag/scheduler/upscaler fallbacks.
 
-The NVIDIA Streamline SDK (v2.14.1) is **not vendored**. It lives at `<path-to-streamline-sdk-v2.14.1>` and is located for native builds via the `NVIDIA_STREAMLINE_ROOT` env var. The native bridge compiles against `sl.interposer.lib` and the `include/` headers; at runtime the Streamline plugin DLLs (`sl.interposer.dll`, `sl.common.dll`, `sl.reflex.dll`, etc.) must be reachable.
+The NVIDIA Streamline SDK (v2.14.1) is **not vendored**. Download it from NVIDIA (RTX SDKs) and point `NVIDIA_STREAMLINE_ROOT` at the extracted root; the native build locates it through that env var. The native bridge compiles against `sl.interposer.lib` and the `include/` headers; at runtime the Streamline plugin DLLs (`sl.interposer.dll`, `sl.common.dll`, `sl.reflex.dll`, etc.) must be reachable.
 
 ## Build
 
