@@ -3,17 +3,20 @@
 # Rebuilds the native bridge and compares the result against the binary that is
 # checked into the repository.
 #
-# The build is deterministic for a fixed toolchain (see docs/native-build.md), so on
-# the recorded toolchain this reports "match". A mismatch on any other MSVC or Windows
-# SDK version means the toolchain differs, not that the checked-in binary is wrong.
+# This is the only check that actually ties the checked-in DLL to its source. CI cannot
+# run it, because the Streamline SDK it links against is not redistributable and so can
+# never be present on a runner.
 #
-# Requires NVIDIA_STREAMLINE_ROOT to point at a Streamline SDK distribution, which is
-# why this cannot run in CI.
+# The build is deterministic for a fixed toolchain (see docs/native-build.md), so on the
+# recorded toolchain this reports "match". A mismatch on any other MSVC or Windows SDK
+# version means the toolchain differs, not that the checked-in binary is wrong.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-checked_in="$root/nvidia-sdk-java/src/main/resources/natives/windows-x64/mc_reflex_tools_native.dll"
-built="$root/nvidia-sdk-native/build/Release/mc_reflex_tools_native.dll"
+cd "$root"
+
+checked_in="nvidia-sdk-java/src/main/resources/natives/windows-x64/mc_reflex_tools_native.dll"
+built="nvidia-sdk-native/build/Release/mc_reflex_tools_native.dll"
 
 if [ -z "${NVIDIA_STREAMLINE_ROOT:-}" ]; then
     echo "NVIDIA_STREAMLINE_ROOT is unset." >&2
@@ -26,9 +29,12 @@ if [ ! -f "$checked_in" ]; then
     exit 2
 fi
 
+echo "Checking the checked-in binary against the recorded checksum..."
+sha256sum -c nvidia-sdk-native/native-artifact.sha256
+
 echo "Rebuilding..."
-cmake -S "$root/nvidia-sdk-native" -B "$root/nvidia-sdk-native/build" >/dev/null
-cmake --build "$root/nvidia-sdk-native/build" --config Release >/dev/null
+cmake -S nvidia-sdk-native -B nvidia-sdk-native/build >/dev/null
+cmake --build nvidia-sdk-native/build --config Release >/dev/null
 
 checked_sum="$(sha256sum "$checked_in" | cut -d' ' -f1)"
 built_sum="$(sha256sum "$built" | cut -d' ' -f1)"

@@ -23,11 +23,12 @@ toolchain. It links against `sl.interposer.lib` at build time and loads NVIDIA's
 `sl.interposer.dll` at runtime; no NVIDIA code is statically embedded in it.
 
 The CI job `native-bridge` proves the bridge still compiles from source, in both the
-with-SDK and without-SDK configurations, and `native-dll-freshness` fails if
-`jni_exports.cpp` has been edited more recently than the checked-in binary. CI cannot
-rebuild the real DLL itself, because the Streamline SDK it links against is not
-redistributable and therefore cannot be present on a build runner. See
-[`native-build.md`](native-build.md) for the toolchain and how to verify the binary locally.
+with-SDK and without-SDK configurations. `native-artifact-integrity` checks the binary
+against a recorded SHA-256 and against the commit ancestry of the source it is built from.
+**Neither establishes that the binary was built from that source.** CI cannot rebuild the
+real DLL at all, because the Streamline SDK it links against is not redistributable and so
+can never be present on a build runner. Verifying provenance needs a machine with the SDK;
+see [`native-build.md`](native-build.md).
 
 ## Trademarks
 

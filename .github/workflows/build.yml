@@ -35,28 +35,38 @@ jobs:
       - name: Build CMake target
         run: cmake --build nvidia-sdk-native/build --config Release
 
-  native-dll-freshness:
-    name: Checked-in DLL is current
+  # A consistency check for maintainers. It is NOT a provenance or trust gate, and it
+  # must not be treated as one: CI cannot rebuild the DLL, because it links against
+  # sl.interposer.lib and includes Streamline headers and neither may be placed on a
+  # runner. Nothing in this job ties the checked-in binary to jni_exports.cpp. Verifying
+  # that needs a machine with the SDK - see scripts/verify-native-dll.sh.
+  native-artifact-integrity:
+    name: Native artifact consistency
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # CI cannot rebuild the real DLL: it links against sl.interposer.lib and includes
-      # Streamline headers, neither of which may be redistributed onto a runner. What CI
-      # can see is whether the source moved after the binary.
-      - name: Fail if jni_exports.cpp is newer than the checked-in binary
+      - name: Checked-in DLL matches the recorded checksum
         run: |
           set -euo pipefail
-          src=$(git log -1 --format=%ct -- nvidia-sdk-native/src/jni_exports.cpp)
-          dll=$(git log -1 --format=%ct -- nvidia-sdk-java/src/main/resources/natives/windows-x64/mc_reflex_tools_native.dll)
-          echo "jni_exports.cpp  last changed: $(date -u -d "@$src")"
-          echo "checked-in DLL   last changed: $(date -u -d "@$dll")"
-          if [ "$dll" -lt "$src" ]; then
-            echo "::error::jni_exports.cpp changed after the checked-in DLL was built. Rebuild it (see docs/native-build.md) and commit the result."
+          sha256sum -c nvidia-sdk-native/native-artifact.sha256
+      - name: Bridge source has not moved past the binary
+        run: |
+          set -euo pipefail
+          dll=nvidia-sdk-java/src/main/resources/natives/windows-x64/mc_reflex_tools_native.dll
+          src=$(git log -1 --format=%H -- nvidia-sdk-native/src/jni_exports.cpp nvidia-sdk-native/CMakeLists.txt)
+          bin=$(git log -1 --format=%H -- "$dll")
+          echo "last commit touching the bridge source: $src"
+          echo "last commit touching the binary:       $bin"
+          # Topological, not chronological: commit dates on a rebase or a backdated
+          # clock mean nothing. If the source is an ancestor of the binary, the binary
+          # was committed at or after it.
+          if ! git merge-base --is-ancestor "$src" "$bin"; then
+            echo "::error::The bridge source changed in a commit that is not an ancestor of the checked-in binary. Rebuild it (see docs/native-build.md) and commit the result."
             exit 1
           fi
-          echo "The checked-in binary is at least as new as the bridge source."
+          echo "The binary is at least as recent as the source it is built from."
 
   redistribution-guard:
     name: No NVIDIA SDK files committed

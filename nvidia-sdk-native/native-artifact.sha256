@@ -1,0 +1,10 @@
+# SHA-256 of the checked-in native bridge, in `sha256sum -c` format.
+#
+#   sha256sum -c nvidia-sdk-native/native-artifact.sha256
+#
+# What this file is for: catching a binary that was swapped, truncated, or rebuilt from
+# a dirty tree without anyone noticing. What it is *not*: provenance. Nothing here ties
+# the binary to jni_exports.cpp - the same commit can change both, and a hash cannot tell
+# you how the file was produced. Verifying that requires rebuilding with the SDK present,
+# which is why scripts/verify-native-dll.sh exists and why CI cannot do it.
+97118d7b33fe7e8916bbbd2b7b6395e23047ab45bbc8bdd5137b23236d160a3d  nvidia-sdk-java/src/main/resources/natives/windows-x64/mc_reflex_tools_native.dll
