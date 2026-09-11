@@ -144,6 +144,11 @@ Fri Sep 11 18:59:33   PC Latency =  8.341   {1.16 0.00 0.00 4.74}   FPS = 673
                       PC Latency =  9.112   {1.48 0.00 0.00 4.97}   FPS = 707
                       PC Latency =  8.939   {1.86 0.00 0.00 5.28}   FPS = 799
                       PC Latency =  9.410   {1.36 0.00 0.00 4.68}   FPS = 642
+Fri Sep 11 19:53:34   PC Latency = 21.477   {0.43 0.00 0.00 5.59}   FPS = 280
+                      PC Latency = 21.680   {0.42 0.00 0.00 5.65}   FPS = 280
+                      PC Latency = 22.606   {0.59 0.00 0.00 5.74}   FPS = 280
+                      PC Latency = 22.816   {0.59 0.00 0.00 5.80}   FPS = 280
+                      PC Latency = 23.135   {0.74 0.00 0.00 5.74}   FPS = 280
 ```
 
 Columns are `I>S  S>Q  Q>R  R>D`.
@@ -152,7 +157,23 @@ Columns are `I>S  S>Q  Q>R  R>D`.
 which the driver can only place if it is receiving the ping round trip. `I>S = 0.00`
 means "no input sampling measured at all"; `I>S = 0.68–1.86` means the driver is
 measuring the real input-to-simulation leg. `S>Q` and `Q>R` stay at 0 because this is a
-CPU-bound scene with no queue or render backlog to accumulate.
+CPU-bound scene with no queue or render backlog to accumulate. They are `0.00` on every
+row of the whole file, in every mode and at every frame rate, so a zero there is the
+instrument's normal reading against Minecraft and not a regression.
+
+**The 19:53:34 run is the post-§7.3 baseline.** It was recorded after the device-extension
+injection was returned to its off-by-default state, on the configuration §7.3 concludes is
+the correct one. `PC Latency` 21.477–23.135 ms and `I>S` 0.42–0.74 put it in the same
+regime as the 18:43:25 run, before the experiment — which is itself the evidence that
+reverting the injection restored the measurement, since the regressed state published no
+frame reports and no pings at all.
+
+Do not compare it against the 18:56/18:59 runs: those were uncapped at 1056 and 673–799
+FPS, where the CPU-bound `R>D` leg shrinks with frame time. 280 FPS is the display's
+refresh rate, so 19:53 is vsync-limited.
+
+This run also stops at the `*** Reflex OFF` header with no OFF rows and no second cycle,
+like every entry from 18:56 onward — see §7.2.
 
 The 19:00+ runs need an **elevated** prompt: `ReflexTest.exe` and `ReflexTestEnable.exe`
 both call `OpenProcessToken`/`GetTokenInformation` and print
