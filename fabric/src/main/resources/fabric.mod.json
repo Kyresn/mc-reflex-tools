@@ -4,6 +4,14 @@
   "version": "${version}",
   "name": "MC Reflex Tools",
   "description": "NVIDIA SDK integration for Minecraft's native Vulkan renderer.",
+  "authors": [
+    "Kyresn114"
+  ],
+  "contact": {
+    "homepage": "https://github.com/Kyresn/mc-reflex-tools",
+    "sources": "https://github.com/Kyresn/mc-reflex-tools",
+    "issues": "https://github.com/Kyresn/mc-reflex-tools/issues"
+  },
   "environment": "client",
   "mixins": [
     "mc_reflex_tools.mixins.json"

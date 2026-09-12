@@ -160,6 +160,10 @@ NVIDIA、Reflex、DLSS、G-SYNC 和 Streamline 是 NVIDIA Corporation 的商标�
 Synergies AB 的商标。本项目与 NVIDIA、Mojang、Microsoft、FabricMC 均无隶属、背书或赞助关系。
 见 [NOTICE.md](NOTICE.md)。
 
+## 作者
+
+由 **Kyresn114** 开发与维护。
+
 ## 许可证
 
 MIT —— 见 [LICENSE](LICENSE)。仅覆盖本仓库的源代码。

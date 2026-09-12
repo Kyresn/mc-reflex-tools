@@ -172,6 +172,10 @@ NVIDIA, Reflex, DLSS, G-SYNC and Streamline are trademarks of NVIDIA Corporation
 a trademark of Mojang Synergies AB. This project is not affiliated with, endorsed by, or
 sponsored by NVIDIA, Mojang, Microsoft, or FabricMC. See [NOTICE.md](NOTICE.md).
 
+## Author
+
+Built and maintained by **Kyresn114**.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). That covers this repository's source code only.
