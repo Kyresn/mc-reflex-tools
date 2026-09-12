@@ -18,6 +18,7 @@ the rest is blocked.
 | --- | --- |
 | Reflex Low Latency | **Working.** Verified end-to-end against the NVIDIA Reflex Test Utility |
 | Reflex frame limiting | Working — `customFrameLimitFps` is applied through Reflex |
+| In-game settings | Working — an **NVIDIA Reflex Tool** screen and a `/reflex` command |
 | DLSS Super Resolution | **Not functional.** No NGX context, and no resource tagging |
 | DLSS-G Frame Generation | **Not functional.** Same blocker; keep it `OFF` |
 
@@ -89,12 +90,39 @@ Configuration lives in `config/mc_reflex_tools.json`, generated on first run:
   "reflexMode": "ON_PLUS_BOOST",
   "customFrameLimitFps": 0,
   "dlssMode": "MAX_QUALITY",
-  "dlssGMode": "OFF"
+  "dlssGMode": "OFF",
+  "debug": false
 }
 ```
 
-`customFrameLimitFps = 0` disables the limit. **Keep `dlssGMode` at `OFF`** until the NGX
-context exists — enabling it makes the Reflex Test Utility's Frame Gen cycles fail.
+`customFrameLimitFps = 0` disables the limit. `debug = true` tightens the lifecycle trace to
+every 30 frames instead of every 300. **Keep `dlssGMode` at `OFF`** until the NGX context
+exists — enabling it makes the Reflex Test Utility's Frame Gen cycles fail.
+
+## In-game settings
+
+Two ways to change the configuration without restarting. Both write the config file, and the
+per-tick apply loop hands the change to `slReflexSetOptions` on the next frame.
+
+**Options → Video Settings → NVIDIA Reflex Tool** opens a screen with:
+
+- **Reflex Mode** — Off / On / On + Boost.
+- **Reflex Frame Limiter** — a 0–999 FPS slider paired with a numeric input box. The box
+  applies on **Enter**, when it loses focus, or when the screen closes — not per keystroke.
+  `0` disables the limiter.
+- **Debug Lifecycle Trace** — the 30-frame/300-frame switch above.
+- A live telemetry line: latency, GPU render time, and the current driver frame ID.
+
+**`/reflex`** is the same surface from the chat bar:
+
+```
+/reflex status
+/reflex mode off|on|boost
+/reflex framelimit <fps>     # 0 disables the limiter
+/reflex debug 0|1
+```
+
+Every argument autocompletes, and a bare subcommand prints its usage instead of doing nothing.
 
 ## How it works
 
@@ -107,6 +135,10 @@ Reflex sleep runs at `RenderSystem.pollEvents()` HEAD — after the previous fra
 before input sampling — and the six PCL markers are emitted at the simulation, queue-submit, and
 present boundaries. The driver's out-of-band latency ping is answered by subclassing the game
 window's procedure, because Minecraft leaves it to GLFW.
+
+The settings screen extends Minecraft's own `OptionsSubScreen` and is injected into Video
+Settings by a Mixin, so it scrolls, scales, and keyboard-navigates like the built-in options
+rather than floating above them.
 
 The design decisions are recorded in [docs/architecture.md](docs/architecture.md), and
 [docs/reflex-verification.md](docs/reflex-verification.md) covers what is and is not verified.

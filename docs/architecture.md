@@ -127,3 +127,11 @@ The switch is `-Dmc_reflex_tools.vulkanLowLatency2=true`, off by default. Re-ena
 `slReflexSetOptions` is re-sent whenever the desired mode or frame limit changes **and** whenever Minecraft replaces its swapchain. Streamline's LL2 backend only forwards latency mode to the driver through the swapchain handle it last saw created, and `setSleepMode` silently returns `eOk` while it has none, so an options call must follow a swapchain (re)creation for the driver to be engaged at all.
 
 This did not fix the regression AD-017 describes, but it is correct on its own terms and it also logs the reason, which makes the two triggers distinguishable in the field.
+
+## AD-019: Settings extend Minecraft's own option screens
+
+The Reflex settings UI is an `OptionsSubScreen` (`ReflexOptionsScreen`) reached from a button injected into `VideoSettingsScreen.addOptions` by a Mixin, not a screen built from raw widgets. It therefore inherits the `HeaderAndFooterLayout` / `OptionsList` machinery: scrolling, GUI-scale handling, keyboard focus traversal, narration, and the standard Done button all behave as they do on vanilla screens.
+
+Widgets are `OptionInstance` values whose `ValueUpdateListener` writes `ModConfig` and calls `ModConfig.save()`. This is the same write path the `/reflex` command uses, so the per-tick apply loop (AD-018) picks up both without knowing which one changed the config. Nothing in the screen talks to Streamline directly.
+
+The frame-limit input box applies its value on Enter, on focus loss, and when the screen closes — deliberately not through `EditBox.setResponder`, which fires per keystroke and would write a partially typed number (`7`, `70`, `700`) to the driver. Applying calls `resetOption` so the paired slider reflects the typed value immediately instead of only after the screen is reopened.

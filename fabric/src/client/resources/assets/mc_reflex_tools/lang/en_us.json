@@ -1,0 +1,20 @@
+{
+  "options.mcreflex.button": "NVIDIA Reflex Tool",
+  "options.mcreflex.title": "NVIDIA Reflex Tool",
+  "options.mcreflex.header.reflex": "NVIDIA Reflex Low Latency",
+  "options.mcreflex.header.framelimit": "Reflex Frame Limiter (1 - 999 FPS, 0 = Off)",
+  "options.mcreflex.header.diagnostics": "Diagnostics & Telemetry",
+  "options.mcreflex.mode": "Reflex Mode",
+  "options.mcreflex.mode.off": "Off",
+  "options.mcreflex.mode.on": "On",
+  "options.mcreflex.mode.boost": "On + Boost",
+  "options.mcreflex.mode.tooltip": "Reduces system latency by dynamically pacing the game engine to eliminate GPU render queue backlog.\n• On: standard low latency pacing.\n• On + Boost: low latency pacing with forced max GPU core clocks.",
+  "options.mcreflex.frameLimit": "Slider (0 - 999 FPS)",
+  "options.mcreflex.frameLimit.tooltip": "Driver-level low-latency frame limiter provided by NVIDIA Reflex. Set to 0 to disable. Recommended for G-SYNC / VRR displays (set 3-4 FPS below refresh rate).",
+  "options.mcreflex.frameLimit.input": "Manual Input (FPS)",
+  "options.mcreflex.debug": "Debug Lifecycle Trace",
+  "options.mcreflex.debug.tooltip": "Logs Vulkan lifecycle marker counters and latency reports to the game log every 30 frames instead of every 300 frames.",
+  "options.mcreflex.telemetry.unavailable": "Reflex Status: Unavailable (Vulkan renderer or NVIDIA GPU required)",
+  "options.mcreflex.telemetry.waiting": "Reflex Status: Active | Waiting for latency report...",
+  "options.mcreflex.telemetry.live": "Latency: %s ms | GPU Render: %s ms | Frame #%s"
+}

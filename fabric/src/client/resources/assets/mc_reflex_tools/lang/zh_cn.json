@@ -1,0 +1,20 @@
+{
+  "options.mcreflex.button": "NVIDIA Reflex Tool",
+  "options.mcreflex.title": "NVIDIA Reflex Tool",
+  "options.mcreflex.header.reflex": "NVIDIA Reflex 低延迟技术",
+  "options.mcreflex.header.framelimit": "Reflex 锁帧控制 (1 - 999 FPS，0 为关闭)",
+  "options.mcreflex.header.diagnostics": "诊断与实时遥测",
+  "options.mcreflex.mode": "Reflex 模式",
+  "options.mcreflex.mode.off": "关闭",
+  "options.mcreflex.mode.on": "开启",
+  "options.mcreflex.mode.boost": "开启 + 增强 (Boost)",
+  "options.mcreflex.mode.tooltip": "通过动态调控游戏引擎节奏消除 GPU 渲染队列积压，显著降低系统延迟。\n• 开启: 标准低延迟调控。\n• 开启 + 增强: 低延迟调控并强制维持 GPU 最高核心频率。",
+  "options.mcreflex.frameLimit": "滑条调节 (0 - 999 FPS)",
+  "options.mcreflex.frameLimit.tooltip": "由 NVIDIA Reflex 驱动层提供的低延迟帧率限制器。设为 0 关闭。推荐配合 G-SYNC / VRR 显示器使用（建议设置为刷新率 -3 至 -4 FPS）。",
+  "options.mcreflex.frameLimit.input": "手动输入 (FPS)",
+  "options.mcreflex.debug": "调试生命周期追踪",
+  "options.mcreflex.debug.tooltip": "将 Vulkan 生命周期 Marker 计数和延迟报告的日志输出频率从每 300 帧提升到每 30 帧。",
+  "options.mcreflex.telemetry.unavailable": "Reflex 状态: 不可用 (需要 Vulkan 渲染后端与 NVIDIA 显卡)",
+  "options.mcreflex.telemetry.waiting": "Reflex 状态: 已激活 | 等待驱动生成延迟报告...",
+  "options.mcreflex.telemetry.live": "PC延迟: %s ms | GPU渲染: %s ms | 帧号 #%s"
+}

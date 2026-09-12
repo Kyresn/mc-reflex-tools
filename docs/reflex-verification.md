@@ -219,6 +219,12 @@ as the contract requires.
 The command surfaces the same counters as §4.1 and §4.2 through `/reflex status`, which is
 the in-app readout §7.1 calls for.
 
+The **Options → Video Settings → NVIDIA Reflex Tool** screen writes the same config through the
+same apply path. Its frame-limit box was verified the same way: typing `450` and leaving it
+unconfirmed changed nothing, and pressing Enter produced
+`Reflex frame limit set to 450 FPS from the options screen` followed by
+`Applied Reflex options: … frameLimitFps=450, reason=options` on the same tick.
+
 ## 5. Measurement precision and validity
 
 ### 5.1 Two independent channels

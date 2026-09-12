@@ -34,6 +34,7 @@ AntiLag, frame scheduler, GPU-timing estimator, or non-NVIDIA upscaler fallback.
 - [x] Validate marker order and failure handling on supported NVIDIA hardware.
 - [x] Answer the driver's out-of-band latency ping from the window procedure.
 - [x] Verify end-to-end against NVIDIA's Reflex Test Utility (`PC Latency` non-zero, `I>S` measured).
+- [x] Expose mode, frame limit, and live telemetry through an in-game settings screen and a `/reflex` command, both of which re-apply through the existing per-tick path.
 - [x] Trace why `VK_NV_low_latency_2` did not initialize on Minecraft's device. Root cause confirmed — the documented fix works but measurably regresses Reflex, so it stays off by default and the cause of the regression is still unknown. See [reflex-verification.md](reflex-verification.md) §7.3.
 
 ## M3 — DLSS Super Resolution

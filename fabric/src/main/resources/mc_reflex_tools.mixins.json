@@ -12,6 +12,7 @@
     "VulkanGpuSurfaceAccessor",
     "VulkanGpuSurfacePresentationMixin",
     "VulkanQueueSubmissionMixin",
+    "VideoSettingsScreenMixin",
     "WindowFullscreenAccessor"
   ],
   "injectors": {

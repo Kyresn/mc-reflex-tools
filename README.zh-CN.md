@@ -16,6 +16,7 @@ NVIDIA Streamline SDK。
 | --- | --- |
 | Reflex 低延迟 | **可用。** 已针对 NVIDIA Reflex Test Utility 完成端到端验证 |
 | Reflex 帧率限制 | 可用 —— `customFrameLimitFps` 通过 Reflex 生效 |
+| 游戏内设置 | 可用 —— **NVIDIA Reflex Tool** 设置界面与 `/reflex` 命令 |
 | DLSS 超分辨率 | **不可用。** 没有 NGX context，也没有实现资源标记 |
 | DLSS-G 帧生成 | **不可用。** 同一个阻塞；请保持 `OFF` |
 
@@ -83,12 +84,38 @@ export NVIDIA_STREAMLINE_ROOT='<path-to-streamline-sdk-v2.14.1>'
   "reflexMode": "ON_PLUS_BOOST",
   "customFrameLimitFps": 0,
   "dlssMode": "MAX_QUALITY",
-  "dlssGMode": "OFF"
+  "dlssGMode": "OFF",
+  "debug": false
 }
 ```
 
-`customFrameLimitFps = 0` 表示关闭帧率限制。**在 NGX context 存在之前请保持 `dlssGMode` 为
-`OFF`** —— 开启它会让 Reflex Test Utility 的帧生成环节失败。
+`customFrameLimitFps = 0` 表示关闭帧率限制。`debug = true` 会把生命周期日志的频率从每 300 帧
+收紧到每 30 帧。**在 NGX context 存在之前请保持 `dlssGMode` 为 `OFF`** —— 开启它会让 Reflex
+Test Utility 的帧生成环节失败。
+
+## 游戏内设置
+
+无需重启即可修改配置的两条路径。两者都写入配置文件，随后每 tick 的应用循环会在下一帧把改动
+交给 `slReflexSetOptions`。
+
+**选项 → 视频设置 → NVIDIA Reflex Tool** 打开设置界面，包含：
+
+- **Reflex 模式** —— 关闭 / 开启 / 开启 + 增强 (Boost)。
+- **Reflex 锁帧控制** —— 0–999 FPS 滑条，右侧配一个数字输入框。输入框在按 **Enter**、失去焦点
+  或关闭界面时生效，而不是每敲一个字符就生效。`0` 表示关闭限制器。
+- **调试生命周期追踪** —— 上面提到的 30 帧/300 帧开关。
+- 一行实时遥测：延迟、GPU 渲染耗时、当前驱动的帧号。
+
+**`/reflex`** 是同一个控制面在聊天栏的入口：
+
+```
+/reflex status
+/reflex mode off|on|boost
+/reflex framelimit <fps>     # 0 表示关闭限制器
+/reflex debug 0|1
+```
+
+所有参数都带补全，子命令不带参数时会打印用法提示，而不是毫无反应。
 
 ## 工作原理
 
@@ -99,6 +126,9 @@ swapchain，交给 Streamline。它从不创建第二个设备、队列、swapch
 Reflex 的 sleep 挂在 `RenderSystem.pollEvents()` 的 HEAD —— 即上一帧 present 之后、输入采样之前；
 六个 PCL 标记分别打在模拟、队列提交和 present 边界上。驱动的带外延迟 ping 通过子类化游戏窗口过程
 来应答，因为 Minecraft 把窗口过程交给了 GLFW。
+
+设置界面继承 Minecraft 自己的 `OptionsSubScreen`，并通过 Mixin 注入视频设置页，因此它的滚动、
+缩放和键盘导航行为都和内建设置项一致，而不是浮在它们之上。
 
 设计决策记录在 [docs/architecture.md](docs/architecture.md)，已验证与未验证的内容记录在
 [docs/reflex-verification.md](docs/reflex-verification.md)。
