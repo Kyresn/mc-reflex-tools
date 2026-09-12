@@ -66,7 +66,7 @@ jar 输出在 `fabric/build/libs/`。它内嵌了预编译的原生桥，所以�
 推送到 `main` 的每次提交都会在 GitHub Actions 上构建，jar 作为 artifact 上传，可以在该次运行的
 摘要页下载。
 
-打形如 `v0.1.1-SNAPSHOT` 的 tag（必须与 `gradle.properties` 里的 `mod_version` 一致）会触发
+打形如 `v0.1.2-SNAPSHOT` 的 tag（必须与 `gradle.properties` 里的 `mod_version` 一致）会触发
 [release.yml](.github/workflows/release.yml)：构建，并创建 **Release** 并附上 jar。版本号仍带
 `-SNAPSHOT` 后缀，所以在去掉它之前，这些都应视为开发版。
 

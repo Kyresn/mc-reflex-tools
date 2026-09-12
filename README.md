@@ -72,7 +72,7 @@ without a C++ toolchain. To rebuild that bridge from source — required after e
 Every push to `main` is built on GitHub Actions, and the jar is uploaded as a run artifact you
 can download from that run's summary page.
 
-Pushing a tag such as `v0.1.1-SNAPSHOT` — it must equal `mod_version` in `gradle.properties`
+Pushing a tag such as `v0.1.2-SNAPSHOT` — it must equal `mod_version` in `gradle.properties`
 — runs [release.yml](.github/workflows/release.yml), which builds and publishes a **release**
 with the jar attached. The version number still carries a `-SNAPSHOT` suffix, so treat these
 as development builds until it stops doing that.
